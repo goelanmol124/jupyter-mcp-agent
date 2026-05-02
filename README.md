@@ -12,6 +12,7 @@ Project-level MCP registration: **[`.cursor/mcp.json`](.cursor/mcp.json)** (targ
 python scripts/agent_mcp_selftest.py run run_all=true
 python scripts/agent_mcp_selftest.py notebook_validate
 python -m llm_jupyter export-apynb path/to/notebook.ipynb   # (re)write same-stem `.apynb`
+python -m llm_jupyter manifest-tail path/to/notebook.ipynb   # last manifest records for that notebook
 ```
 
 **Docs:** [PRD](docs/PRD.md) · [Implementation](docs/IMPLEMENTATION.md) · **License:** [MIT](LICENSE)
@@ -35,6 +36,7 @@ llm-jupyter serve -n /absolute/path/to/analysis.ipynb
 ```bash
 python -m llm_jupyter export-apynb demos/agent_demo_beta.ipynb
 # or: llm-jupyter export-apynb path/to/analysis.ipynb -o path/to/other.apynb
+python -m llm_jupyter manifest-tail demos/agent_demo_markov.ipynb --last 8
 ```
 
 **Environment (optional):**

@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from llm_jupyter.manifest import (
+    manifest_records_for_notebook,
+    tail_manifest_records,
+)
+
+
+def test_manifest_records_filters_by_resolved_notebook(tmp_path: Path):
+    nb_a = tmp_path / "a.ipynb"
+    nb_b = tmp_path / "b.ipynb"
+    nb_a.write_text("{}", encoding="utf-8")
+    nb_b.write_text("{}", encoding="utf-8")
+    ra = nb_a.expanduser().resolve()
+    rb = nb_b.expanduser().resolve()
+
+    mf = tmp_path / "manifest.jsonl"
+    lines = (
+        {"notebook_path": str(ra), "run_id": "one"},
+        {"notebook_path": str(rb), "run_id": "two"},
+        {"notebook_path": str(ra), "run_id": "three"},
+        {"oops": True},
+        "not-json",
+        {"notebook_path": str(rb), "run_id": "four"},
+    )
+    with mf.open("w", encoding="utf-8") as f:
+        for obj in lines:
+            if isinstance(obj, dict):
+                f.write(json.dumps(obj) + "\n")
+            else:
+                f.write(str(obj) + "\n")
+
+    a_rows = manifest_records_for_notebook(nb_a, manifest_file=mf)
+    assert [r["run_id"] for r in a_rows] == ["one", "three"]
+    b_rows = manifest_records_for_notebook(nb_b, manifest_file=mf)
+    assert [r["run_id"] for r in b_rows] == ["two", "four"]
+
+
+def test_tail_manifest_truncates_ordered(tmp_path: Path):
+    nb = tmp_path / "only.ipynb"
+    nb.write_text("{}", encoding="utf-8")
+    mf = tmp_path / "manifest.jsonl"
+    r = nb.expanduser().resolve()
+    with mf.open("w", encoding="utf-8") as f:
+        for i in range(5):
+            f.write(json.dumps({"notebook_path": str(r), "i": i}) + "\n")
+    tail = tail_manifest_records(nb, manifest_file=mf, last_n=2)
+    assert [x["i"] for x in tail] == [3, 4]
+
+    assert [x["i"] for x in tail_manifest_records(nb, manifest_file=mf, last_n=0)] == [0, 1, 2, 3, 4]
+
+
+def test_missing_manifest_returns_empty(tmp_path: Path):
+    nb = tmp_path / "ghost.ipynb"
+    nb.write_text("{}", encoding="utf-8")
+    mf = tmp_path / "no_such_manifest.jsonl"
+    assert manifest_records_for_notebook(nb, manifest_file=mf) == []

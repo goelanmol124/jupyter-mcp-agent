@@ -101,7 +101,9 @@ def main() -> None:
             "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_buffer.ipynb companion_validate\n"
             "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_lognormal.ipynb run run_all=true\n"
             "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_beta.ipynb run run_all=true\n"
+            "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_markov.ipynb run run_all=true\n"
             "  python -m llm_jupyter export-apynb demos/your.ipynb\n"
+            "  python -m llm_jupyter manifest-tail demos/agent_demo_markov.ipynb --last 4\n"
             "  python scripts/agent_mcp_selftest.py -n demos/agent_scratch.ipynb --companion-strict run run_all=true\n"
             "    ^ fails when same-stem .apynb is missing.\n"
         ),

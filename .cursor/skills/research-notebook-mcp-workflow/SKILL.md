@@ -15,7 +15,7 @@ disable-model-invocation: true
 - Tools are **`run`**, **`kernel_*`**, **`clear_outputs`**, **`notebook_validate`**, **`companion_validate`**. Optional **`.apynb`** sidecar (same stem as the `.ipynb`): when that file exists, **`run`** cross-checks code-cell sources and `metadata.cell_id` before executing; use **`companion_strict=true`** to require a sidecar. **`variable_preview`** and **`cells_apply`** are **design targets**—do not assume they exist unless your install added them.
 - With the repo’s **project-level MCP file** `.cursor/mcp.json` (see README): **reload Cursor** so `llm-jupyter` registers; otherwise run `python scripts/agent_mcp_selftest.py …` from the repo root to hit the same code path.
 - **`run`** requires **exactly one** intent: **`cell_id`**, **`run_all=true`**, or **`run_until_cell_id`**. Passing more than one is an error (avoids silent “`cell_id` wins” bugs).
-- Every execution returns **`run_id`** and appends it to **`manifest.jsonl`** next to the notebook—**cite `run_id` in chat** when you want durable cross-turn memory of a specific execute.
+- Every execution returns **`run_id`** and appends it to **`manifest.jsonl`** next to the notebook—**cite `run_id` in chat** when you want durable cross-turn memory of a specific execute. **Shell:** `python -m llm_jupyter manifest-tail path/to/analysis.ipynb` prints recent matching lines (same `notebook_path` after path resolution).
 
 ## Mindset: R&D, not shipping
 

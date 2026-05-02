@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 
@@ -47,12 +48,44 @@ def main(argv: list[str] | None = None) -> None:
         help="Output `.apynb` (default: same stem as notebook)",
     )
 
+    mt = sub.add_parser(
+        "manifest-tail",
+        help="Print recent manifest.jsonl records for one notebook (notebook_path-matched).",
+    )
+    mt.add_argument("notebook", help="Path to .ipynb")
+    mt.add_argument(
+        "-m",
+        "--manifest",
+        default=None,
+        metavar="PATH",
+        help="manifest.jsonl path (default: beside the notebook)",
+    )
+    mt.add_argument(
+        "--last",
+        type=int,
+        default=8,
+        metavar="N",
+        help="Keep only the last N matching records (default: 8; use 0 for all)",
+    )
+
     args = p.parse_args(argv)
     if args.cmd == "export-apynb":
         from llm_jupyter.companion import write_companion_from_notebook
 
         outp = write_companion_from_notebook(args.notebook, args.out)
         print(outp)
+        return
+
+    if args.cmd == "manifest-tail":
+        from llm_jupyter.manifest import tail_manifest_records
+
+        mf_arg = Path(args.manifest).expanduser() if args.manifest else None
+        rows = tail_manifest_records(
+            args.notebook,
+            last_n=args.last,
+            manifest_file=mf_arg,
+        )
+        print(json.dumps(rows, indent=2, default=str))
         return
 
     if args.cmd != "serve":
