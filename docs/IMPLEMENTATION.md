@@ -138,24 +138,6 @@ Exact fields will move; approximate shape:
 
   "stderr_chunks": {},
 
-  "stream_summary": {
-
-    "stdout_chars": 0,
-
-    "stderr_chars": 0,
-
-    "stdout_chunk_count": 0,
-
-    "stderr_chunk_count": 0,
-
-    "stdout_tail": "",
-
-    "stderr_tail": ""
-
-  },
-
-  "execution_error_optional": {"ename": "NameError", "evalue": "name 'pi_est' is not defined"},
-
   "variable_preview_optional": { "examples": ["truncated repr / small value samples for requested names"] }
 
 }
@@ -164,9 +146,7 @@ Exact fields will move; approximate shape:
 
 
 
-- **stdout_chunks / stderr_chunks / stream_summary:** long stdout/stderr chunk across numbered keys; **`stream_summary`** repeats counts and tail text at top level for agent-friendly scanning.
-
-- **execution_error (when applicable):** kernel **`CellExecutionError`** summary as **`ename`** / **`evalue`**; prefer over raw **`stderr_chunks`** when the failure is notebook code.
+- **notebook_file_stamp:** catches disk edits concurrent with assistant planning.  
 
 - **python_env_snapshot:** answers “why does my result differ?”—fill aggressively in **`record`**, lighter in **`explore`**.
 
@@ -223,7 +203,7 @@ Saved output files on disk stay full quality for humans; previews in JSON stay s
 
 
 
-Use the **same chunking pattern** for both streams, plus **`stream_summary`** tails for easier LLM ingestion. Deferred: true streaming transports until proved necessary.
+Use the **same chunking pattern** for both streams. Deferred: true streaming transports until proved necessary.
 
 
 
@@ -231,7 +211,7 @@ Use the **same chunking pattern** for both streams, plus **`stream_summary`** ta
 
 
 
-Aim for: **`cells_apply`**, **`run`**, one **`kernel`** group (`restart`, `interrupt`, optionally `status`), optional **`clear_outputs`**, optional **`notebook_validate`**.
+Aim for: **`cells_apply`**, **`run`**, **`notebook_outline`** (read-only cell map — keeps **`cell_id` discovery cheap), one **`kernel`** group (`restart`, `interrupt`, optionally `status`), optional **`clear_outputs`**, optional **`notebook_validate`**.
 
 
 

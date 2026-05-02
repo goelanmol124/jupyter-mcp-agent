@@ -8,6 +8,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from llm_jupyter.notebook import (
+    ensure_cell_ids,
     load_notebook,
     save_notebook,
     try_validate_notebook_file,
@@ -29,9 +30,10 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
     mcp = FastMCP(
         name="llm-jupyter",
         instructions=(
-            "llm-jupyter: ipykernel notebook runner via run / kernel_* / validation / clear_outputs. "
+            "llm-jupyter: ipykernel notebook runner via run / kernel_* / notebook_outline / validation / clear_outputs. "
             "Relative notebook_path values resolve vs this process cwd (Cursor: keep mcp.json cwd=workspaceFolder). "
-            "Pass notebook_path when not targeting the server's default -n notebook."
+            "Pass notebook_path when not targeting the server's default -n notebook. "
+            "Call notebook_outline before targeting run(..., cell_id=...) so you do not guess UUIDs."
         ),
     )
     sess = KernelSession(notebook_default, roots, default_mode)
@@ -122,6 +124,58 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         sess.check_allowed_notebook(nb_path)
         try_validate_notebook_file(nb_path)
         return {"status": "ok", "notebook_path": str(nb_path)}
+
+    @mcp.tool(name="notebook_outline")
+    def notebook_outline(
+        notebook_path: str | None = None,
+        persist_cell_ids: bool = True,
+        preview_chars: int = 200,
+    ) -> dict[str, object]:
+        """List cells with index, type, code cell_id, and a short source preview—no kernel.
+
+        Use this before run(cell_id=...) instead of reading raw .ipynb JSON (large / easy to mis-copy).
+        """
+        nb_path = _notebook_arg(notebook_default, notebook_path)
+        sess.check_allowed_notebook(nb_path)
+        try_validate_notebook_file(nb_path)
+        nb = load_notebook(nb_path)
+        if persist_cell_ids:
+            ensure_cell_ids(nb, persist_path=nb_path)
+        cap = max(48, min(int(preview_chars), 2000))
+
+        def _src_text(cell_src: str | list[str]) -> str:
+            if isinstance(cell_src, list):
+                return "".join(cell_src)
+            return str(cell_src)
+
+        rows: list[dict[str, object]] = []
+        code_n = 0
+        for i, cell in enumerate(nb.cells):
+            ctype = str(cell.get("cell_type", ""))
+            meta = cell.get("metadata") if isinstance(cell.get("metadata"), dict) else {}
+            cid = meta.get("cell_id") if ctype == "code" else None
+            raw = _src_text(cell.source)
+            snippet = raw.strip("\n")
+            if len(snippet) > cap:
+                snippet = snippet[: max(1, cap - 3)] + "..."
+            row: dict[str, object] = {
+                "index": i,
+                "cell_type": ctype,
+                "cell_id": cid if ctype == "code" else None,
+                "source_preview": snippet,
+            }
+            rows.append(row)
+            if ctype == "code":
+                code_n += 1
+
+        return {
+            "status": "ok",
+            "notebook_path": str(nb_path.resolve()),
+            "persist_cell_ids_used": bool(persist_cell_ids),
+            "preview_chars_used": cap,
+            "code_cell_count": code_n,
+            "cells": rows,
+        }
 
     @mcp.tool(name="companion_validate")
     def companion_validate(

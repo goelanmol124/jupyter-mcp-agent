@@ -4,6 +4,7 @@
 
 - **`run` response `stream_summary`:** character totals, stdout/stderr chunk counts, and trailing stream text (~1.5k chars each) surfaced at top level alongside **`stdout_chunks`**.
 - **`run` payload `execution_error`:** **`ename`** and **`evalue`** from the kernel after **`CellExecutionError`** (read before **`stderr_chunks`** when triaging).
+- **`notebook_outline` MCP tool:** cell **`index`** / **`cell_id`** plus short **`source_preview`** without starting a kernel — reduces malformed **`cell_id`** and avoids agents ingesting huge notebook JSON (where **attention** often favors beginnings and endings over the middle).
 
 
 ### Added (demos)
