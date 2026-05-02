@@ -29,6 +29,13 @@ from llm_jupyter.previews import previews_from_cells
 from llm_jupyter.stamp import notebook_file_stamp
 
 
+def _server_tool_digest() -> dict[str, str]:
+    """Stable metadata echoed on MCP replies so agents detect wrong interpreter/path."""
+    from llm_jupyter import __version__ as ver
+
+    return {"llm_jupyter_version": ver}
+
+
 def _session_cap() -> int:
     raw = os.environ.get("LLM_JUPYTER_MAX_NOTEBOOK_KERNELS", "32").strip()
     try:
@@ -229,7 +236,7 @@ class KernelSession:
         path = self._kernel_tools_path_arg(notebook_path)
         out = dict(self._get_handle(path).kernel_restart(art_prefix=art_prefix))
         out["notebook_path"] = str(path)
-        return out
+        return {**_server_tool_digest(), **out}
 
     def kernel_interrupt(self, notebook_path: str | None = None) -> dict[str, Any]:
         path = self._kernel_tools_path_arg(notebook_path)
@@ -237,13 +244,14 @@ class KernelSession:
         h = self._handles.get(k)
         if h is None:
             return {
+                **_server_tool_digest(),
                 "ok": False,
                 "message": "No kernel session for this notebook yet.",
                 "notebook_path": str(path),
             }
         result = dict(h.kernel_interrupt())
         result["notebook_path"] = str(path)
-        return result
+        return {**_server_tool_digest(), **result}
 
     def kernel_status(self, notebook_path: str | None = None) -> dict[str, Any]:
         path = self._kernel_tools_path_arg(notebook_path)
@@ -251,6 +259,7 @@ class KernelSession:
         h = self._handles.get(k)
         if h is None:
             return {
+                **_server_tool_digest(),
                 "notebook_path": str(path),
                 "kernel_generation": 0,
                 "kernel_alive": False,
@@ -262,7 +271,7 @@ class KernelSession:
         out = h.kernel_status()
         out["notebook_path"] = str(path)
         out["notebook_kernel_active"] = True
-        return out
+        return {**_server_tool_digest(), **out}
 
     def check_allowed_notebook(self, notebook_path: Path) -> None:
         cand = notebook_path.expanduser().resolve()
@@ -744,6 +753,7 @@ class KernelSession:
             error_one_liner = raw if len(raw) <= 380 else raw[:377] + "..."
 
         assistant_quick: dict[str, Any] = {
+            **_server_tool_digest(),
             "notebook_filename": notebook_path.name,
             "run_id": run_id,
             "status": status,

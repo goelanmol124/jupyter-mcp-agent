@@ -17,7 +17,7 @@ disable-model-invocation: true
 - **Path semantics:** **`notebook_path`** resolves vs the server **`cwd`**; omit for the **`serve -n`** default when calling **`run`** or **`kernel_*`**. For sidecars: **`export-apynb` → `companion_validate` → `run`**.
 - **Multi-notebook:** Cursor shares one MCP process across chats; **`notebook_path`** selects a **distinct ipykernel**. Pass **`notebook_path`** on **`kernel_restart`**, **`kernel_interrupt`**, and **`kernel_status`** for any notebook that is not the **`serve -n`** default.
 - **`run`** requires **exactly one** intent: **`cell_id`**, **`run_all=true`**, or **`run_until_cell_id`**. Passing more than one is an error (avoids silent “`cell_id` wins” bugs).
-- Each successful **`run`** tool call returns **`assistant_quick`** first: notebook filename, **`status`**, optional **`error_one_liner`** / **`stale_primary_note`**, **`stream_capture`**, **`cells_executed_n`**. **`execution_error`** is next to **`status`** in the top-level object. **`companion`** is omitted when the sidecar gate was **`skipped`** (no repetition of “no `.apynb`”).
+- Each successful **`run`** tool call returns **`assistant_quick`** first: **`llm_jupyter_version`**, notebook filename, **`status`**, optional **`error_one_liner`** / **`stale_primary_note`**, **`stream_capture`**, **`cells_executed_n`**. **`execution_error`** is next to **`status`** in the top-level object. **`companion`** is omitted when the sidecar gate was **`skipped`** (no repetition of “no `.apynb`”).
 - Every execution returns **`run_id`** and appends it to **`manifest.jsonl`** next to the notebook—**cite `run_id` in chat** when you want durable cross-turn memory of a specific execute. **Shell:** `python -m llm_jupyter manifest-tail path/to/analysis.ipynb` (recent rows) or add **`--run-id …`** after you cite one run in chat (same notebook filter still applies). If `--run-id` matches nothing, the CLI prints a short **stderr** explanation (stdout stays JSON for piping).
 
 ## Mindset: R&D, not shipping
@@ -39,7 +39,7 @@ disable-model-invocation: true
 
 ## MCP usage habits
 
-- **`notebook_outline`** leads with **`notebook_filename`** and **`code_cell_indices`** (then the **`cells`** list); use those before parsing every row when you only need topology.
+- **`notebook_outline`** leads with **`notebook_filename`**, **`code_cell_indices`**, and **`llm_jupyter_version`** (then the **`cells`** list); use those before parsing every row when you only need topology. If **`llm_jupyter_version`** disagrees with **`pyproject.toml`** in the repo, fix MCP **`PYTHONPATH`** or the interpreter, not the notebook.
 - Prefer editing in Cursor’s notebook UI; optional **`.apynb`** JSON (`companion_version`, `cells` with `cell_id` + `source` per **code cell in order**) is for agents and scripts—keep it in sync with the notebook or validation fails before **`run`**. **`companion_validate`** checks drift without executing. Refresh the sidecar after UI-only edits: **`python -m llm_jupyter export-apynb path/to/analysis.ipynb`**.
 - Prefer **`run_all`** or **`run_until`** when reproducibility of the chain matters; note **`explore`** vs **`record`** when conclusions or shared figures matter.
 - Name plot files using **server hints** (`suggested_figure_prefix` / `LLM_NB_ART_PREFIX`) so runs stay traceable in logs.

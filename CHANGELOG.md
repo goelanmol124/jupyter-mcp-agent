@@ -8,6 +8,8 @@
 - **`.cursor/mcp.json`:** Default **`llm-jupyter`** args no longer include **`serve --watch`** (fewer transient MCP errors while Cursor holds a long-lived stdio session).
 - **`kernel_*` MCP tools:** pass **`notebook_path`** for the notebook whose kernel you mean (omit only when **`serve -n`** is that notebook); responses include **`notebook_path`** plus **`notebook_kernel_active`** (**`kernel_status`** only) until **`run`** or **`kernel_restart`** touches that notebook.
 - Documentation pass: README tool list + Cursor MCP snippet; PRD / IMPLEMENTATION aligned with shipped **`.apynb`** companions and CLI (`export-apynb`, `manifest-tail`).
+- **Version echo on MCP payloads:** **`llm_jupyter_version`** is included in **`run.assistant_quick`**, **`kernel_*`** responses, and **`notebook_outline`** so agents can spot a stale global install or wrong venv before trusting tool shape.
+
 ### Added
 
 - **`run` response `stream_summary`:** character totals, stdout/stderr chunk counts, and trailing stream text (~1.5k chars each) surfaced at top level alongside **`stdout_chunks`**.

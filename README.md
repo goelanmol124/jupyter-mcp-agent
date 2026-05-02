@@ -82,10 +82,10 @@ python -m llm_jupyter manifest-tail demos/agent_demo_markov.ipynb --last 8
 
 | Tool | Purpose |
 |------|---------|
-| `run` | One execution mode (`cell_id` / `run_all` / `run_until_cell_id`); top **`assistant_quick`** skim, **`run_id`**, chunked streams, **`stream_summary`**, **`execution_error`** when a cell fails, previews, stamps; same-stem **`.apynb`** checked when present (field omitted when gate **skipped**) |
-| `kernel_restart` / `kernel_interrupt` / `kernel_status` | **Per-notebook** ipykernel: pass **`notebook_path`** (omit only when it matches **`serve`** **`-n`** default); responses include **`notebook_path`** |
+| `run` | One execution mode (`cell_id` / `run_all` / `run_until_cell_id`); top **`assistant_quick`** includes **`llm_jupyter_version`** + skim fields, **`run_id`**, streams, **`execution_error`** when a cell fails; same-stem **`.apynb`** when present ( **`companion`** omitted when gate **skipped**) |
+| `kernel_restart` / `kernel_interrupt` / `kernel_status` | **Per-notebook** ipykernel; each response includes **`llm_jupyter_version`** and **`notebook_path`** |
 | `clear_outputs` | Strip persisted outputs; optional **`clear_execution_counts`** |
-| `notebook_outline` | Read-only map: **`notebook_filename`**, **`code_cell_indices`**, **`index`**, **`cell_type`**, code **`cell_id`**, **`source_preview`** — use before **`run(cell_id=...)`** |
+| `notebook_outline` | Read-only map: **`llm_jupyter_version`**, **`notebook_filename`**, **`code_cell_indices`**, per-cell **`cell_id`** / previews |
 | `notebook_validate` | `nbformat` structural check |
 | `companion_validate` | **`.apynb`** ↔ **`.ipynb`** before kernel work |
 

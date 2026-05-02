@@ -7,6 +7,7 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
+from llm_jupyter import __version__ as _LMJ_VERSION
 from llm_jupyter.notebook import (
     ensure_cell_ids,
     load_notebook,
@@ -34,7 +35,9 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
             "Each notebook_path gets its own ipykernel; pass the same notebook_path on run and kernel_* for that artefact. "
             "kernel_restart / kernel_interrupt / kernel_status require notebook_path unless serve was started with -n "
             "(then omit for the default). Relative paths resolve vs server cwd. "
-            "Call notebook_outline before run(..., cell_id=...) when you need cell ids."
+            "Call notebook_outline before run(..., cell_id=...) when you need cell ids. "
+            "Tool replies include llm_jupyter_version; if it disagrees with the repo you are editing, "
+            "the MCP Python env is probably not loading workspace src (see mcp.json PYTHONPATH)."
         ),
     )
     sess = KernelSession(notebook_default, roots, default_mode)
@@ -56,7 +59,7 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
     ) -> dict[str, object]:
         """Execute cells (one mode). Includes run_id. Checks same-stem `.apynb` when present.
 
-        **`assistant_quick`** at the top is a skim block (status, error one-liner, stale note,
+        **`assistant_quick`** at the top is a skim block (**`llm_jupyter_version`**, status, error one-liner, stale note,
         stream size hint) ahead of previews and chunked streams.
 
         On failed cells, top-level **`execution_error`** carries **`ename`** and **`evalue`** from the kernel
@@ -142,8 +145,8 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         """List cells with index, type, code cell_id, and a short source preview—no kernel.
 
         **`notebook_filename`**, **`code_cell_count`**, and **`code_cell_indices`** summarize structure first;
-        **`notebook_path`** stays absolute for disambiguation. Use before **run**(cell_id=...) instead of
-        reading raw .ipynb JSON (large / easy to mis-copy).
+        **`llm_jupyter_version`** identifies the running server code; **`notebook_path`** stays absolute for disambiguation.
+        Use before **run**(cell_id=...) instead of reading raw .ipynb JSON (large / easy to mis-copy).
         """
         nb_path = _notebook_arg(notebook_default, notebook_path)
         sess.check_allowed_notebook(nb_path)
@@ -182,6 +185,7 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
 
         return {
             "status": "ok",
+            "llm_jupyter_version": _LMJ_VERSION,
             "notebook_filename": nb_path.name,
             "code_cell_count": code_n,
             "code_cell_indices": code_indices,
