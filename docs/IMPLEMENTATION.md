@@ -25,6 +25,11 @@ Each MCP tool should carry a **short description** — long blobs belong in READ
 `ipykernel`, `jupyter_client`, `nbformat`, MCP over **stdio**. Optional Pillow (or similar) for smaller image previews in JSON.
 
 
+### Multi-notebook MCP (one shared process)
+
+
+Each distinct **`notebook_path`** gets its **`KernelManager` / NotebookClient pair** so R&D on **`analysis_a.ipynb`** does not collide with **`analysis_b.ipynb`**. **`kernel_restart`**, **`interrupt`**, and **`status`** take **`notebook_path`** (unless **`serve`** **`-n`** is the default notebook). LRU eviction when **`LLM_JUPYTER_MAX_NOTEBOOK_KERNELS`** is exceeded (**`0`** = uncapped).
+
 
 ### Stable `cell_id` and automated tests
 

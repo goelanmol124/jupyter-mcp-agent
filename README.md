@@ -1,6 +1,6 @@
 # LLM Jupyter
 
-Open-source **Python MCP** server for **`ipykernel`** notebooks: **`run`** (single **`cell_id`**, **`run_all`**, or **`run_until_cell_id`**, with **`halt_on_error`**), **`explore`** / **`record`** modes, truthful execution JSON (stamps, env snapshot, stdout/stderr chunking, small previews), optional same-stem **`.apynb`** drift checks, and append-only **`manifest.jsonl`**.
+Open-source **Python MCP** server for **`ipykernel`** notebooks — **one ipykernel per `notebook_path`** inside a shared MCP process (safe across Cursor chats), with **`run`**, **`kernel_*`** (scoped per notebook unless `-n` default), truthful execution JSON, optional **`.apynb`**, **`manifest.jsonl`**.
 
 **Release:** v0.1.1 · **Python:** ≥ 3.10 · **License:** [MIT](LICENSE)
 
@@ -58,7 +58,7 @@ python -m llm_jupyter manifest-tail demos/agent_demo_markov.ipynb --last 8
 | `LLM_JUPYTER_NOTEBOOK` | Default **`serve --notebook`** |
 | `LLM_JUPYTER_MODE` | `explore` or `record` |
 | `LLM_JUPYTER_ROOTS` | Extra allowed roots (`os.pathsep`-separated) |
-| `LLM_NB_ART_PREFIX` | Figure naming hint forwarded into kernel env |
+| `LLM_JUPYTER_MAX_NOTEBOOK_KERNELS` | Max concurrent notebooks with live kernels (default **32**; set **0** for uncapped—not recommended); LRU evicts oldest |
 
 **Example `mcp.json`** (repo default — see [**.cursor/mcp.json**](.cursor/mcp.json)):
 
@@ -80,7 +80,7 @@ python -m llm_jupyter manifest-tail demos/agent_demo_markov.ipynb --last 8
 | Tool | Purpose |
 |------|---------|
 | `run` | One execution mode (`cell_id` / `run_all` / `run_until_cell_id`); **`run_id`**, chunked streams, top-level **`stream_summary`** (tail + counts), **`execution_error`** (**`ename`**, **`evalue`**) when a cell fails, previews, stamps; same-stem **`.apynb`** checked when present |
-| `kernel_restart` / `kernel_interrupt` / `kernel_status` | Kernel lifecycle (**`kernel_generation`** on restart) |
+| `kernel_restart` / `kernel_interrupt` / `kernel_status` | **Per-notebook** ipykernel: pass **`notebook_path`** (omit only when it matches **`serve`** **`-n`** default); responses include **`notebook_path`** |
 | `clear_outputs` | Strip persisted outputs; optional **`clear_execution_counts`** |
 | `notebook_outline` | Read-only notebook map: **`index`**, **`cell_type`**, code **`cell_id`**, **`source_preview`** — use before **`run(cell_id=...)`** |
 | `notebook_validate` | `nbformat` structural check |

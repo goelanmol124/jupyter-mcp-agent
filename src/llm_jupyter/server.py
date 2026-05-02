@@ -30,10 +30,11 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
     mcp = FastMCP(
         name="llm-jupyter",
         instructions=(
-            "llm-jupyter: ipykernel notebook runner via run / kernel_* / notebook_outline / validation / clear_outputs. "
-            "Relative notebook_path values resolve vs this process cwd (Cursor: keep mcp.json cwd=workspaceFolder). "
-            "Pass notebook_path when not targeting the server's default -n notebook. "
-            "Call notebook_outline before targeting run(..., cell_id=...) so you do not guess UUIDs."
+            "llm-jupyter: notebook-keyed kernels (multiple .ipynb in one MCP process). "
+            "Each notebook_path gets its own ipykernel; pass the same notebook_path on run and kernel_* for that artefact. "
+            "kernel_restart / kernel_interrupt / kernel_status require notebook_path unless serve was started with -n "
+            "(then omit for the default). Relative paths resolve vs server cwd. "
+            "Call notebook_outline before run(..., cell_id=...) when you need cell ids."
         ),
     )
     sess = KernelSession(notebook_default, roots, default_mode)
@@ -79,19 +80,22 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
             return {"status": "error", "tool_error": str(e), "traceback": traceback.format_exc()}
 
     @mcp.tool(name="kernel_restart")
-    def kernel_restart(art_prefix_hint: str | None = None) -> dict[str, object]:
-        """Restart kernel process; increments kernel_generation."""
-        return sess.kernel_restart(art_prefix=art_prefix_hint)
+    def kernel_restart(
+        notebook_path: str | None = None,
+        art_prefix_hint: str | None = None,
+    ) -> dict[str, object]:
+        """Restart ipykernel for this notebook; bumps kernel_generation for that path only."""
+        return sess.kernel_restart(notebook_path=notebook_path, art_prefix=art_prefix_hint)
 
     @mcp.tool(name="kernel_interrupt")
-    def kernel_interrupt() -> dict[str, object]:
-        """Send interrupt signal to live kernel."""
-        return sess.kernel_interrupt()
+    def kernel_interrupt(notebook_path: str | None = None) -> dict[str, object]:
+        """Interrupt the ipykernel tied to notebook_path."""
+        return sess.kernel_interrupt(notebook_path=notebook_path)
 
     @mcp.tool(name="kernel_status")
-    def kernel_status() -> dict[str, object]:
-        """Inspect kernel_generation and liveness."""
-        return sess.kernel_status()
+    def kernel_status(notebook_path: str | None = None) -> dict[str, object]:
+        """Inspect kernel_generation / alive for notebook_path (omit if -n default matches)."""
+        return sess.kernel_status(notebook_path=notebook_path)
 
     @mcp.tool(name="clear_outputs")
     def clear_outputs(

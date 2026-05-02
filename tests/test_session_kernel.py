@@ -77,3 +77,43 @@ def test_kernel_restart_increments_generation(tmp_path: Path):
         assert out["restart_since_previous_tool_call"] is True
     finally:
         sess.close()
+
+
+@pytest.mark.kernel
+def test_two_notebooks_have_independent_kernels(tmp_path: Path):
+    import nbformat as nbfmt
+
+    a_path = tmp_path / "a.ipynb"
+    b_path = tmp_path / "b.ipynb"
+
+    nb_a = nbf.new_notebook(
+        cells=[
+            nbf.new_code_cell('who = "nb_a"\n'),
+            nbf.new_code_cell("print(who)"),
+        ],
+    )
+    nb_b = nbf.new_notebook(
+        cells=[
+            nbf.new_code_cell('who = "nb_b"\n'),
+            nbf.new_code_cell("print(who)"),
+        ],
+    )
+    for p, nb in ((a_path, nb_a), (b_path, nb_b)):
+        nbfmt.write(nb, open(p, "w", encoding="utf-8"))
+
+    sess = KernelSession(None, [], "explore")
+    try:
+        sess.run(notebook_path=str(a_path), run_all=True)
+        sess.run(notebook_path=str(b_path), run_all=True)
+
+        nb = nbfmt.read(open(a_path, encoding="utf-8"), as_version=4)
+        print_id = nb.cells[-1]["metadata"]["cell_id"]
+        out = sess.run(notebook_path=str(a_path), cell_id=str(print_id))
+        assert out["status"] == "ok"
+        text = "".join(out["stdout_chunks"].values())
+        assert "nb_a" in text
+        assert "nb_b" not in text
+        assert sess.kernel_status(notebook_path=str(a_path))["notebook_kernel_active"] is True
+        assert sess.kernel_status(notebook_path=str(b_path))["notebook_kernel_active"] is True
+    finally:
+        sess.close()

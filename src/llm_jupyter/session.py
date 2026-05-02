@@ -4,6 +4,7 @@ import os
 import time
 import traceback
 import uuid
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -28,23 +29,20 @@ from llm_jupyter.previews import previews_from_cells
 from llm_jupyter.stamp import notebook_file_stamp
 
 
-class KernelSession:
-    """One kernel + one reusable NotebookClient view per MCP process (v1)."""
+def _session_cap() -> int:
+    raw = os.environ.get("LLM_JUPYTER_MAX_NOTEBOOK_KERNELS", "32").strip()
+    try:
+        n = int(raw)
+    except ValueError:
+        return 32
+    return max(1, min(n, 256)) if n != 0 else 0
 
-    def __init__(
-        self,
-        default_notebook: Path | None,
-        extra_root_paths: list[Path],
-        default_mode: str,
-        execute_timeout_sec: int = 600,
-        chunk_chars: int = 6000,
-    ) -> None:
-        self.default_notebook = default_notebook.resolve() if default_notebook else None
-        self.extra_roots = [normalize_allowed_path(str(p)) for p in extra_root_paths]
-        self.default_mode = default_mode if default_mode in ("explore", "record") else "explore"
+
+class NotebookKernelHandle:
+    """ipykernel process + reusable NotebookClient for exactly one notebook path."""
+
+    def __init__(self, *, execute_timeout_sec: int) -> None:
         self.execute_timeout_sec = execute_timeout_sec
-        self.chunk_chars = chunk_chars
-
         self.km: KernelManager | None = None
         self._nb_client: NotebookClient | None = None
         self.kernel_generation = 0
@@ -75,7 +73,7 @@ class KernelSession:
         self._nb_client = None
 
     def kernel_restart(self, art_prefix: str | None = None) -> dict[str, Any]:
-        """Hard-restart kernel; bumps kernel_generation."""
+        """Hard-restart kernel; bumps kernel_generation for this notebook only."""
         self.dispose_nb_client_shell()
         if self.km is not None:
             try:
@@ -155,6 +153,116 @@ class KernelSession:
         else:
             self._nb_client.nb = nb
         return self._nb_client
+
+
+class KernelSession:
+    """Notebook-keyed kernels: Cursor shares one MCP process across chats/tools — isolate RAM per `.ipynb`."""
+
+    def __init__(
+        self,
+        default_notebook: Path | None,
+        extra_root_paths: list[Path],
+        default_mode: str,
+        execute_timeout_sec: int = 600,
+        chunk_chars: int = 6000,
+    ) -> None:
+        self.default_notebook = default_notebook.resolve() if default_notebook else None
+        self.extra_roots = [normalize_allowed_path(str(p)) for p in extra_root_paths]
+        self.default_mode = default_mode if default_mode in ("explore", "record") else "explore"
+        self.execute_timeout_sec = execute_timeout_sec
+        self.chunk_chars = chunk_chars
+
+        self._handles: OrderedDict[Path, NotebookKernelHandle] = OrderedDict()
+
+    def _canonical(self, notebook_path: Path) -> Path:
+        return notebook_path.expanduser().resolve()
+
+    def close(self) -> None:
+        for h in list(self._handles.values()):
+            h.close()
+        self._handles.clear()
+
+    @property
+    def kernel_generation(self) -> int:
+        """Backward-compat for callers/tests that only use `-n` single notebook."""
+        if not self.default_notebook:
+            return 0
+        k = self._canonical(self.default_notebook)
+        h = self._handles.get(k)
+        return h.kernel_generation if h else 0
+
+    def dispose_nb_client_shell(self) -> None:
+        """Close NotebookClient shells for all kernels (tests / agent selftest teardown)."""
+        for h in self._handles.values():
+            h.dispose_nb_client_shell()
+
+    def _get_handle(self, notebook_resolved_path: Path) -> NotebookKernelHandle:
+        cand = notebook_resolved_path.expanduser().resolve()
+
+        existing = self._handles.pop(cand, None)
+        if existing is not None:
+            self._handles[cand] = existing
+            return existing
+
+        cap = _session_cap()
+        if cap and len(self._handles) >= cap:
+            _, evict_h = self._handles.popitem(last=False)
+            evict_h.close()
+
+        h = NotebookKernelHandle(execute_timeout_sec=self.execute_timeout_sec)
+        self._handles[cand] = h
+        return h
+
+    def _kernel_tools_path_arg(self, notebook_path: str | None) -> Path:
+        nb_path_arg = notebook_path or (str(self.default_notebook) if self.default_notebook else "")
+        if not str(nb_path_arg).strip():
+            raise ValueError(
+                "notebook_path is required for kernel_restart / kernel_interrupt / kernel_status "
+                "unless the MCP server was started with --notebook / -n "
+                "(one default notebook implied).",
+            )
+        path = normalize_allowed_path(nb_path_arg)
+        self.check_allowed_notebook(path)
+        return path.resolve()
+
+    def kernel_restart(self, notebook_path: str | None = None, art_prefix: str | None = None) -> dict[str, Any]:
+        path = self._kernel_tools_path_arg(notebook_path)
+        out = dict(self._get_handle(path).kernel_restart(art_prefix=art_prefix))
+        out["notebook_path"] = str(path)
+        return out
+
+    def kernel_interrupt(self, notebook_path: str | None = None) -> dict[str, Any]:
+        path = self._kernel_tools_path_arg(notebook_path)
+        k = self._canonical(path)
+        h = self._handles.get(k)
+        if h is None:
+            return {
+                "ok": False,
+                "message": "No kernel session for this notebook yet.",
+                "notebook_path": str(path),
+            }
+        result = dict(h.kernel_interrupt())
+        result["notebook_path"] = str(path)
+        return result
+
+    def kernel_status(self, notebook_path: str | None = None) -> dict[str, Any]:
+        path = self._kernel_tools_path_arg(notebook_path)
+        k = self._canonical(path)
+        h = self._handles.get(k)
+        if h is None:
+            return {
+                "notebook_path": str(path),
+                "kernel_generation": 0,
+                "kernel_alive": False,
+                "interrupted_flag": False,
+                "full_top_to_bottom_at_generation": None,
+                "notebook_kernel_active": False,
+                "note": "No kernel session for this notebook yet; call run(...) or kernel_restart.",
+            }
+        out = h.kernel_status()
+        out["notebook_path"] = str(path)
+        out["notebook_kernel_active"] = True
+        return out
 
     def check_allowed_notebook(self, notebook_path: Path) -> None:
         cand = notebook_path.expanduser().resolve()
@@ -319,11 +427,6 @@ class KernelSession:
         if mode_eff not in ("explore", "record"):
             mode_eff = "explore"
 
-        restart_since_previous = (
-            self._generation_at_previous_tool_end is not None
-            and self._generation_at_previous_tool_end != self.kernel_generation
-        )
-
         nb_path_arg = notebook_path or (str(self.default_notebook) if self.default_notebook else "")
         if not str(nb_path_arg).strip():
             raise ValueError(
@@ -334,6 +437,12 @@ class KernelSession:
             raise FileNotFoundError(f"Notebook not found: {path}")
 
         self.check_allowed_notebook(path)
+
+        handle = self._get_handle(path)
+        restart_since_previous = (
+            handle._generation_at_previous_tool_end is not None
+            and handle._generation_at_previous_tool_end != handle.kernel_generation
+        )
 
         ensure_cell_ids(load_notebook(path), persist_path=path)
         nb = load_notebook(path)
@@ -368,12 +477,12 @@ class KernelSession:
                 if cid0:
                     anchor_short = cid0[:8]
 
-        self._ensure_kernel(art_prefix=os.environ.get("LLM_NB_ART_PREFIX"))
+        handle._ensure_kernel(art_prefix=os.environ.get("LLM_NB_ART_PREFIX"))
 
         from datetime import UTC, datetime
 
         prefix_hint = (
-            f"{datetime.now(UTC).strftime('%Y%m%d')}_gen{self.kernel_generation}_{anchor_short}"
+            f"{datetime.now(UTC).strftime('%Y%m%d')}_gen{handle.kernel_generation}_{anchor_short}"
         )
 
         if mode_eff == "record" and prefix_hint:
@@ -412,6 +521,7 @@ class KernelSession:
                 companion_summary,
                 sm,
                 None,
+                kernel_generation=handle.kernel_generation,
             )
             stamp = notebook_file_stamp(path)
             append_manifest(
@@ -423,17 +533,17 @@ class KernelSession:
                     "notebook_path": str(path),
                     "notebook_file_stamp": stamp,
                     "python_env_snapshot": python_env_snapshot(mode_eff),
-                    "kernel_generation": self.kernel_generation,
+                    "kernel_generation": handle.kernel_generation,
                     "cells_executed": [],
                     "status": "ok",
                     "note": "no_code_cells",
                     "companion": companion_summary,
                 },
             )
-            self._generation_at_previous_tool_end = self.kernel_generation
+            handle._generation_at_previous_tool_end = handle.kernel_generation
             return payload
 
-        client = self._executor(nb, path)
+        client = handle._executor(nb, path)
         client.allow_errors = not halt_on_error
 
         ran_ok_full = False
@@ -473,7 +583,7 @@ class KernelSession:
                 ran_ok_full = indices_of_code_cells(nb) == executed_in_order and status == "ok"
         except KeyboardInterrupt:
             status = "interrupted"
-            self.interrupted = True
+            handle.interrupted = True
         except Exception:
             status = "error"
             stderr_acc.append(traceback.format_exc())
@@ -481,9 +591,9 @@ class KernelSession:
         save_notebook(nb, path)
 
         if ran_ok_full:
-            self.full_top_to_bottom_at_generation = self.kernel_generation
+            handle.full_top_to_bottom_at_generation = handle.kernel_generation
 
-        stale, stale_notes = self._compute_stale_notes_after_run(ran_ok_full, status)
+        stale, stale_notes = self._compute_stale_notes_after_run(ran_ok_full, status, handle)
 
         out_files = self._guess_output_files(path.parent, prefix_hint)
 
@@ -526,6 +636,7 @@ class KernelSession:
             companion_summary,
             sm,
             execution_error,
+            kernel_generation=handle.kernel_generation,
         )
 
         append_manifest(
@@ -537,7 +648,7 @@ class KernelSession:
                 "notebook_path": str(path),
                 "notebook_file_stamp": payload["notebook_file_stamp"],
                 "python_env_snapshot": payload["python_env_snapshot"],
-                "kernel_generation": self.kernel_generation,
+                "kernel_generation": handle.kernel_generation,
                 "cells_executed": cells_executed_ids,
                 "status": status,
                 "stderr_digest_tail": stderr_joined[-512:],
@@ -546,7 +657,7 @@ class KernelSession:
             },
         )
 
-        self._generation_at_previous_tool_end = self.kernel_generation
+        handle._generation_at_previous_tool_end = handle.kernel_generation
         return payload
 
     def _guess_output_files(self, nb_dir: Path, prefix: str) -> list[str]:
@@ -559,7 +670,9 @@ class KernelSession:
             and p.suffix.lower() in (".png", ".jpg", ".jpeg", ".svg", ".csv", ".json", ".pdf")
         )
 
-    def _compute_stale_notes_after_run(self, ran_ok_full: bool, status: str) -> tuple[bool, list[str]]:
+    def _compute_stale_notes_after_run(
+        self, ran_ok_full: bool, status: str, handle: NotebookKernelHandle
+    ) -> tuple[bool, list[str]]:
         notes: list[str] = []
         if status == "interrupted":
             notes.append("Interrupted: persisted outputs may be incomplete versus kernel RAM.")
@@ -568,7 +681,7 @@ class KernelSession:
             notes.append(
                 "Execution exited with errors; some cells reflect this batch while others keep older persisted output.",
             )
-            if self.full_top_to_bottom_at_generation != self.kernel_generation:
+            if handle.full_top_to_bottom_at_generation != handle.kernel_generation:
                 notes.append(
                     "No successful full-notebook rerun yet at the current kernel_generation "
                     "(including after restart).",
@@ -579,7 +692,7 @@ class KernelSession:
         notes.append(
             "Partial run: cells not rerun may keep stale outputs versus live kernel RAM.",
         )
-        if self.full_top_to_bottom_at_generation != self.kernel_generation:
+        if handle.full_top_to_bottom_at_generation != handle.kernel_generation:
             notes.append(
                 "Kernel restarted since the last full-notebook rerun; rerun all cells to align saved plots.",
             )
@@ -609,6 +722,8 @@ class KernelSession:
         companion_summary: dict[str, Any] | None = None,
         stream_summary: dict[str, Any] | None = None,
         execution_error: dict[str, str] | None = None,
+        *,
+        kernel_generation: int,
     ) -> dict[str, Any]:
         stamp = notebook_file_stamp(notebook_path)
         env_snap = python_env_snapshot(mode)
@@ -616,7 +731,7 @@ class KernelSession:
         res: dict[str, Any] = {
             "run_id": run_id,
             "mode": mode,
-            "kernel_generation": self.kernel_generation,
+            "kernel_generation": kernel_generation,
             "cells_executed": cells_executed,
             "status": status,
             "restart_since_previous_tool_call": restart_since_previous,
