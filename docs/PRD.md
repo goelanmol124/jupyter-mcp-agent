@@ -24,7 +24,7 @@ Prefer **small default previews**, plus parameters to fetch **more rows or large
 
 ## Plain-language terms
 
-- **Companion file:** optional JSON or YAML **next to the notebook** listing cells and source text so agents avoid hand-editing `.ipynb` JSON. Before running, this must line up with the real notebook—or the server should raise a clear error.
+- **Companion file:** optional **same-stem JSON `.apynb`** beside the notebook (`companion_version: 1`; code cells only, with `cell_id` + `source`). **Implemented** — regenerate via **`llm-jupyter export-apynb`** after UI edits; **`companion_validate`** / **`run`** reject drift.
 
 - **MCP tool text:** keep **tool descriptions short**. Long blocks in MCP definitions confuse models; spell out workflows in README or Cursor rules instead.
 

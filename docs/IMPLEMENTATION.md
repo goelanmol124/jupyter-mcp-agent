@@ -58,11 +58,11 @@ Expose optional **`variable_preview`** (or similar): **names the user or assista
 
 
 
-Implement **cell mutation tools before** introducing a companion file; add the companion file only if plain tools feel too awkward.
+**Shipped:** **`export-apynb`**, **`companion_validate`**, and automatic **`run`** drift checks against same-stem **`.apynb`**. Prefer **`export-apynb` → `companion_validate` → `run`** when introducing sidecars.
 
 
 
-Structural checks **without running code** (`notebook_validate` flag) catch bad merges before hitting the kernel.
+Structural **`notebook_validate`** catches bad merges before kernel work.
 
 
 
