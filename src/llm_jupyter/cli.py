@@ -67,6 +67,16 @@ def main(argv: list[str] | None = None) -> None:
         metavar="N",
         help="Keep only the last N matching records (default: 8; use 0 for all)",
     )
+    mt.add_argument(
+        "--run-id",
+        dest="run_id",
+        default=None,
+        metavar="ID",
+        help=(
+            "If set, print only manifest rows with this run_id "
+            "(ignores --last; same notebook filter still applies)"
+        ),
+    )
 
     args = p.parse_args(argv)
     if args.cmd == "export-apynb":
@@ -77,14 +87,21 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if args.cmd == "manifest-tail":
-        from llm_jupyter.manifest import tail_manifest_records
+        from llm_jupyter.manifest import manifest_records_for_run, tail_manifest_records
 
         mf_arg = Path(args.manifest).expanduser() if args.manifest else None
-        rows = tail_manifest_records(
-            args.notebook,
-            last_n=args.last,
-            manifest_file=mf_arg,
-        )
+        if args.run_id is not None and str(args.run_id).strip():
+            rows = manifest_records_for_run(
+                args.notebook,
+                str(args.run_id).strip(),
+                manifest_file=mf_arg,
+            )
+        else:
+            rows = tail_manifest_records(
+                args.notebook,
+                last_n=args.last,
+                manifest_file=mf_arg,
+            )
         print(json.dumps(rows, indent=2, default=str))
         return
 

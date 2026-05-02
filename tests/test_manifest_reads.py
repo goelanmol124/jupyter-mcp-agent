@@ -5,6 +5,7 @@ from pathlib import Path
 
 from llm_jupyter.manifest import (
     manifest_records_for_notebook,
+    manifest_records_for_run,
     tail_manifest_records,
 )
 
@@ -58,3 +59,23 @@ def test_missing_manifest_returns_empty(tmp_path: Path):
     nb.write_text("{}", encoding="utf-8")
     mf = tmp_path / "no_such_manifest.jsonl"
     assert manifest_records_for_notebook(nb, manifest_file=mf) == []
+
+
+def test_manifest_records_for_run_specific_id(tmp_path: Path):
+    nb = tmp_path / "r.ipynb"
+    nb.write_text("{}", encoding="utf-8")
+    rr = nb.expanduser().resolve()
+    mf = tmp_path / "manifest.jsonl"
+    rows_in = (
+        {"notebook_path": str(rr), "run_id": "aaa", "i": 0},
+        {"notebook_path": str(rr), "run_id": "bbb", "i": 1},
+        {"notebook_path": str(rr), "run_id": " aaa ", "i": 2},  # edge: stored id differs
+        {"notebook_path": str(rr), "run_id": "ccc", "i": 3},
+        {"notebook_path": str(rr), "notebook_only": True},
+        {"notebook_path": "/tmp/other.ipynb", "run_id": "aaa", "x": True},
+    )
+    with mf.open("w", encoding="utf-8") as f:
+        for obj in rows_in:
+            f.write(json.dumps(obj) + "\n")
+    got = manifest_records_for_run(nb, "aaa", manifest_file=mf)
+    assert sorted(x["i"] for x in got) == [0, 2]  # run_id whitespace normalized

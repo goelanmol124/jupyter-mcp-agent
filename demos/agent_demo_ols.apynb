@@ -1,0 +1,18 @@
+{
+  "companion_version": 1,
+  "notebook": "agent_demo_ols.ipynb",
+  "cells": [
+    {
+      "cell_id": "11111111-1111-4111-8111-111111117001",
+      "source": "import numpy as np\nrng = np.random.default_rng(23)\n"
+    },
+    {
+      "cell_id": "11111111-1111-4111-8111-111111117002",
+      "source": "n = 800\nbeta_true = np.array([1.25, -0.75])\nx1 = rng.normal(size=n)\nX = np.column_stack([np.ones(n), x1])\nnoise_sd = 0.35\ny = X @ beta_true + noise_sd * rng.normal(size=n)\n"
+    },
+    {
+      "cell_id": "11111111-1111-4111-8111-111111117003",
+      "source": "coef, _, _, _ = np.linalg.lstsq(X, y, rcond=None)\nrmse_coef = float(np.sqrt(np.mean((coef - beta_true) ** 2)))\nprint('beta_hat', coef)\nprint('beta_true', beta_true)\nprint('rmse_coef', rmse_coef)\n"
+    }
+  ]
+}

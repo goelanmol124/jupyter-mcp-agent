@@ -57,3 +57,22 @@ def tail_manifest_records(
     if last_n <= 0:
         return rows
     return rows[-last_n:]
+
+
+def manifest_records_for_run(
+    notebook_path: str | Path,
+    run_id: str,
+    *,
+    manifest_file: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Manifest rows for this notebook with a matching ``run_id`` (stable cross-turn cite)."""
+
+    needle = str(run_id).strip()
+    if not needle:
+        return []
+    out: list[dict[str, Any]] = []
+    for row in manifest_records_for_notebook(notebook_path, manifest_file=manifest_file):
+        rid = row.get("run_id")
+        if rid is not None and str(rid).strip() == needle:
+            out.append(row)
+    return out
