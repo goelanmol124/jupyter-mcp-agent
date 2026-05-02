@@ -42,6 +42,14 @@ Optionally snapshot-test MCP tool definitions so summaries stay brief.
 
 
 
+### Variable previews (live kernel, for debugging)
+
+
+
+Notebook files and PNGs rarely tell you **`df.shape`**, **missing-value counts**, or whether a gate variable flipped. For R&D triage—human or agent—expose an optional **`variable_preview`** (or similar): user- or assistant-selected names plus safe defaults (dims, dtypes, capped `repr`, sampling rules). Keeps debugging **grounded in RAM**, not guesses. Ship off by default until stable; behaviour must stay bounded so context isn’t drowned.
+
+
+
 ### Authoring priority
 
 

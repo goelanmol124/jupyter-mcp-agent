@@ -6,6 +6,12 @@ Notebook-style work fits **research**: change a small piece of code, run it, ins
 
 This project is building a **thin MCP server**: it runs a real **Python kernel**, updates **`.ipynb`** and output files, returns **predictable JSON**, and keeps **history** you can search—so **R&D workflows stay easy for both you and the model**, not only for shipping application code.
 
+### Interpreter state (“why did that number happen?”)
+
+Much of scientific debugging is not “did the cell run?” but **what do the objects in memory actually look like?** Wrong shapes, dtypes, stray NaNs, flags that gate downstream logic, seed state—a plot or a `print()` can hide that. Those answers live **in the live kernel**, not only in saved notebook outputs.
+
+So beside prints and previews, support **cheap, capped looks at named variables** (sizes, dtypes, truncated `repr`, tiny samples)—for you and for the assistant—without dumping whole frames into chat. Treat that as optional (see **`variable_preview`**) because it adds surface area and context cost, but the **purpose** is core for R&D: close the gap between “output looked fine” and “the computation was wrong.”
+
 ## What we’re building
 
 A **small, open-source** Python MCP server that uses **`ipykernel`** to execute notebook cells and save **`.ipynb`** files so editors keep working as usual—with outputs and image paths on disk so people can inspect **real numbers and plots**, not only short summaries.
