@@ -49,7 +49,8 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
             "Call notebook_outline before run(..., cell_id=...) when you need cell ids. "
             "Tool replies include llm_jupyter_version; if it disagrees with the repo you are editing, "
             "the MCP Python env is probably not loading workspace src (see mcp.json PYTHONPATH). "
-            "On failures, status:error payloads include \"tool\" (which handler failed) plus tool_error/traceback."
+            "On failures, status:error payloads include \"tool\" (which handler failed) plus tool_error/traceback "
+            "(including kernel_* path/permission errors)."
         ),
     )
     sess = KernelSession(notebook_default, roots, default_mode)
@@ -108,17 +109,26 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         art_prefix_hint: str | None = None,
     ) -> dict[str, object]:
         """Restart ipykernel for this notebook; bumps kernel_generation for that path only."""
-        return sess.kernel_restart(notebook_path=notebook_path, art_prefix=art_prefix_hint)
+        try:
+            return sess.kernel_restart(notebook_path=notebook_path, art_prefix=art_prefix_hint)
+        except Exception as e:
+            return _mcp_tool_error("kernel_restart", e)
 
     @mcp.tool(name="kernel_interrupt")
     def kernel_interrupt(notebook_path: str | None = None) -> dict[str, object]:
         """Interrupt the ipykernel tied to notebook_path."""
-        return sess.kernel_interrupt(notebook_path=notebook_path)
+        try:
+            return sess.kernel_interrupt(notebook_path=notebook_path)
+        except Exception as e:
+            return _mcp_tool_error("kernel_interrupt", e)
 
     @mcp.tool(name="kernel_status")
     def kernel_status(notebook_path: str | None = None) -> dict[str, object]:
         """Inspect kernel_generation / alive for notebook_path (omit if -n default matches)."""
-        return sess.kernel_status(notebook_path=notebook_path)
+        try:
+            return sess.kernel_status(notebook_path=notebook_path)
+        except Exception as e:
+            return _mcp_tool_error("kernel_status", e)
 
     @mcp.tool(name="clear_outputs")
     def clear_outputs(

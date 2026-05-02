@@ -9,7 +9,7 @@
 - **`kernel_*` MCP tools:** pass **`notebook_path`** for the notebook whose kernel you mean (omit only when **`serve -n`** is that notebook); responses include **`notebook_path`** plus **`notebook_kernel_active`** (**`kernel_status`** only) until **`run`** or **`kernel_restart`** touches that notebook.
 - Documentation pass: README tool list + Cursor MCP snippet; PRD / IMPLEMENTATION aligned with shipped **`.apynb`** companions and CLI (`export-apynb`, `manifest-tail`).
 - **Version echo on MCP payloads:** **`llm_jupyter_version`** is included in **`run.assistant_quick`**, **`kernel_*`** responses, and **`notebook_outline`** so agents can spot a stale global install or wrong venv before trusting tool shape.
-- **`status: error` MCP payloads:** **`run`**, **`notebook_outline`**, **`notebook_validate`**, **`clear_outputs`**, and **`companion_validate`** failures include **`llm_jupyter_version`**, **`tool`** (which handler failed), **`tool_error`**, and **`traceback`**. Success responses for **`clear_outputs`**, **`notebook_validate`**, and **`companion_validate`** also echo **`llm_jupyter_version`**.
+- **`status: error` MCP payloads:** **`run`**, **`notebook_outline`**, **`notebook_validate`**, **`clear_outputs`**, **`companion_validate`**, and **`kernel_*`** handler failures include **`llm_jupyter_version`**, **`tool`**, **`tool_error`**, and **`traceback`**. Success responses for **`clear_outputs`**, **`notebook_validate`**, and **`companion_validate`** also echo **`llm_jupyter_version`**.
 
 ### Added
 
