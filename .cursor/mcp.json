@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "llm-jupyter": {
+      "command": "python",
+      "args": [
+        "-m",
+        "llm_jupyter",
+        "serve",
+        "-n",
+        "demos/agent_scratch.ipynb"
+      ],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}

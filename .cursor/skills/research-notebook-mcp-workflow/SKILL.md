@@ -10,6 +10,13 @@ disable-model-invocation: true
 
 # Research Notebook MCP — agent workflow
 
+## Current MCP server (repo `llm_jupyter`): what exists today
+
+- Tools are typically **`run`**, **`kernel_*`**, **`clear_outputs`**, **`notebook_validate`**. **`variable_preview`**, **companion YAML/JSON**, and **`cells_apply`** are **design targets**—do not assume they exist; edit notebooks in Cursor’s UI unless your install added them.
+- With the repo’s **project-level MCP file** `.cursor/mcp.json` (see README): **reload Cursor** so `llm-jupyter` registers; otherwise run `python scripts/agent_mcp_selftest.py …` from the repo root to hit the same code path.
+- **`run`** requires **exactly one** intent: **`cell_id`**, **`run_all=true`**, or **`run_until_cell_id`**. Passing more than one is an error (avoids silent “`cell_id` wins” bugs).
+- Every execution returns **`run_id`** and appends it to **`manifest.jsonl`** next to the notebook—**cite `run_id` in chat** when you want durable cross-turn memory of a specific execute.
+
 ## Mindset: R&D, not shipping
 
 - Optimize for **fast understanding**, not “enterprise” structure. One screen of clear code beats five files of ceremony.
