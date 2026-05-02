@@ -16,6 +16,7 @@ def test_mcp_tool_surface_is_small():
         "notebook_validate",
         "notebook_outline",
         "companion_validate",
+        "server_info",
     }
     for t in tools:
         desc = (t.description or "").strip()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import traceback
 from pathlib import Path
 
@@ -44,6 +45,7 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         instructions=(
             "llm-jupyter: notebook-keyed kernels (multiple .ipynb in one MCP process). "
             "Each notebook_path gets its own ipykernel; pass the same notebook_path on run and kernel_* for that artefact. "
+            "Prefer server_info (no kernel) when sanity-checking version/cwd/serve -n wiring in a new session. "
             "kernel_restart / kernel_interrupt / kernel_status require notebook_path unless serve was started with -n "
             "(then omit for the default). Relative paths resolve vs server cwd. "
             "Call notebook_outline before run(..., cell_id=...) when you need cell ids. "
@@ -255,6 +257,21 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
             return {"status": "ok", "llm_jupyter_version": _LMJ_VERSION, "report": rep}
         except Exception as e:
             return _mcp_tool_error("companion_validate", e)
+
+    @mcp.tool(name="server_info")
+    def server_info() -> dict[str, object]:
+        """No-kernel MCP smoke check: llm_jupyter_version, cwd, serve -n default, roots, mode.
+
+        Call early to confirm MCP uses the workspace package and resolve paths vs process cwd."""
+        nb_def = str(notebook_default.expanduser().resolve()) if notebook_default else None
+        return {
+            "status": "ok",
+            "llm_jupyter_version": _LMJ_VERSION,
+            "process_cwd": os.getcwd(),
+            "default_notebook_path": nb_def,
+            "extra_roots_resolved": [str(p.expanduser().resolve()) for p in roots],
+            "default_mode": default_mode,
+        }
 
     # Let local tooling (e.g. scripts/agent_mcp_selftest.py) shut down kernels cleanly between calls.
     mcp._llm_kernel_session = sess  # noqa: SLF001

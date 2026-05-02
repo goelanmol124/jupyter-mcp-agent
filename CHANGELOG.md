@@ -16,6 +16,7 @@
 - **`run` response `stream_summary`:** character totals, stdout/stderr chunk counts, and trailing stream text (~1.5k chars each) surfaced at top level alongside **`stdout_chunks`**.
 - **`run` payload `execution_error`:** **`ename`** and **`evalue`** from the kernel after **`CellExecutionError`** (read before **`stderr_chunks`** when triaging).
 - **`notebook_outline` MCP tool:** cell **`index`** / **`cell_id`** plus short **`source_preview`** without starting a kernel — reduces malformed **`cell_id`** and avoids agents ingesting huge notebook JSON (where **attention** often favors beginnings and endings over the middle).
+- **`server_info` MCP tool:** No kernel — returns **`llm_jupyter_version`**, process **`cwd`**, resolved **`serve -n`** default path (when set), extra roots, **`default_mode`** for wiring checks before **`run`**.
 - **`Per-notebook ipykernels`**: Cursor shares one MCP process across chats/tools; kernels are keyed by resolved **`notebook_path`** so **`run`** on **`nb1.ipynb`** vs **`nb2.ipynb`** no longer bleeds variables. LRU cap via **`LLM_JUPYTER_MAX_NOTEBOOK_KERNELS`** (default **32**, **0** = uncapped).
 
 ### Added (demos)
