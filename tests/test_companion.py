@@ -6,7 +6,7 @@ from pathlib import Path
 import nbformat.v4 as nbf
 import pytest
 
-from llm_jupyter.companion import validate_companion_file
+from llm_jupyter.companion import validate_companion_file, write_companion_from_notebook
 from llm_jupyter.notebook import load_notebook, validate_notebook_node
 from llm_jupyter.session import KernelSession
 
@@ -144,6 +144,18 @@ def test_inspect_companion_strict_missing_sidecar_raises(tmp_path: Path):
             sess.inspect_companion(notebook_path=str(nb_path), companion_strict=True)
     finally:
         sess.close()
+
+
+def test_write_companion_from_notebook_roundtrip_validates(tmp_path: Path):
+    nb_path = tmp_path / "n.ipynb"
+    c1 = nbf.new_code_cell("x = 42\n")
+    _write_nb(nb_path, [c1])
+    side = write_companion_from_notebook(nb_path)
+    assert side == tmp_path / "n.apynb"
+    nb = load_notebook(nb_path)
+    vr = validate_companion_file(notebook_path=nb_path, notebook=nb, companion_file=side)
+    assert vr["ok"] is True
+    assert vr["companion_code_cells_checked"] == 1
 
 
 @pytest.mark.kernel

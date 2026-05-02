@@ -36,7 +36,7 @@ disable-model-invocation: true
 
 ## MCP usage habits
 
-- Prefer editing in Cursor’s notebook UI; optional **`.apynb`** JSON (`companion_version`, `cells` with `cell_id` + `source` per **code cell in order**) is for agents and scripts—keep it in sync with the notebook or validation fails before **`run`**. **`companion_validate`** checks drift without executing.
+- Prefer editing in Cursor’s notebook UI; optional **`.apynb`** JSON (`companion_version`, `cells` with `cell_id` + `source` per **code cell in order**) is for agents and scripts—keep it in sync with the notebook or validation fails before **`run`**. **`companion_validate`** checks drift without executing. Refresh the sidecar after UI-only edits: **`python -m llm_jupyter export-apynb path/to/analysis.ipynb`**.
 - Prefer **`run_all`** or **`run_until`** when reproducibility of the chain matters; note **`explore`** vs **`record`** when conclusions or shared figures matter.
 - Name plot files using **server hints** (`suggested_figure_prefix` / `LLM_NB_ART_PREFIX`) so runs stay traceable in logs.
 

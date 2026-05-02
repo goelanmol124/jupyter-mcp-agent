@@ -11,6 +11,7 @@ Project-level MCP registration: **[`.cursor/mcp.json`](.cursor/mcp.json)** (targ
 ```bash
 python scripts/agent_mcp_selftest.py run run_all=true
 python scripts/agent_mcp_selftest.py notebook_validate
+python -m llm_jupyter export-apynb path/to/notebook.ipynb   # (re)write same-stem `.apynb`
 ```
 
 **Docs:** [PRD](docs/PRD.md) · [Implementation](docs/IMPLEMENTATION.md) · **License:** [MIT](LICENSE)
@@ -27,6 +28,13 @@ pip install -e ".[dev]"
 python -m llm_jupyter serve --notebook /absolute/path/to/analysis.ipynb --default-mode explore
 # or
 llm-jupyter serve -n /absolute/path/to/analysis.ipynb
+```
+
+**`.apynb` sidecar refresh** (mirror code cells next to validation / `run`):
+
+```bash
+python -m llm_jupyter export-apynb demos/agent_demo_beta.ipynb
+# or: llm-jupyter export-apynb path/to/analysis.ipynb -o path/to/other.apynb
 ```
 
 **Environment (optional):**

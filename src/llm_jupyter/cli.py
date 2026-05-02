@@ -34,7 +34,27 @@ def main(argv: list[str] | None = None) -> None:
         default=os.environ.get("LLM_JUPYTER_MODE", "explore"),
     )
 
+    exp = sub.add_parser(
+        "export-apynb",
+        help="Write a `.apynb` sidecar from code cells (persists missing metadata.cell_id).",
+    )
+    exp.add_argument("notebook", help="Path to .ipynb")
+    exp.add_argument(
+        "-o",
+        "--out",
+        default=None,
+        metavar="PATH",
+        help="Output `.apynb` (default: same stem as notebook)",
+    )
+
     args = p.parse_args(argv)
+    if args.cmd == "export-apynb":
+        from llm_jupyter.companion import write_companion_from_notebook
+
+        outp = write_companion_from_notebook(args.notebook, args.out)
+        print(outp)
+        return
+
     if args.cmd != "serve":
         raise SystemExit(2)
 

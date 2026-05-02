@@ -1,0 +1,18 @@
+{
+  "companion_version": 1,
+  "notebook": "agent_demo_beta.ipynb",
+  "cells": [
+    {
+      "cell_id": "11111111-1111-4111-8111-111111114001",
+      "source": "import numpy as np\nrng = np.random.default_rng(11)\n"
+    },
+    {
+      "cell_id": "11111111-1111-4111-8111-111111114002",
+      "source": "prior_a, prior_b = 2.0, 2.0\nn_trials = 40\nk_success = 12\npost_a = prior_a + k_success\npost_b = prior_b + (n_trials - k_success)\n"
+    },
+    {
+      "cell_id": "11111111-1111-4111-8111-111111114003",
+      "source": "mean_p = post_a / (post_a + post_b)\nmle = k_success / n_trials\nsamples = rng.beta(post_a, post_b, size=200_000)\nprint('posterior_mean_analytic', mean_p)\nprint('mle_k_over_n', mle)\nprint('mc_mean_from_beta_draws', float(samples.mean()))\n"
+    }
+  ]
+}

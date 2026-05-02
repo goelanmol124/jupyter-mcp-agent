@@ -115,3 +115,41 @@ def validate_companion_file(
         notebook=notebook,
         companion_data=data,
     )
+
+
+def write_companion_from_notebook(
+    notebook_path: str | Path,
+    companion_out: str | Path | None = None,
+) -> Path:
+    """Write companion JSON from code cells in order.
+
+    Persists ``metadata.cell_id`` for any code cell that was missing one.
+    """
+    from llm_jupyter.notebook import ensure_cell_ids, indices_of_code_cells, load_notebook, validate_notebook_node
+
+    nb_path = Path(notebook_path).expanduser().resolve()
+    if not nb_path.is_file():
+        raise FileNotFoundError(f"Notebook not found: {nb_path}")
+
+    nb = load_notebook(nb_path)
+    ensure_cell_ids(nb, persist_path=nb_path)
+    nb = load_notebook(nb_path)
+    validate_notebook_node(nb)
+
+    out = (
+        Path(companion_out).expanduser().resolve()
+        if companion_out is not None
+        else companion_path_for_notebook(nb_path)
+    )
+
+    rows = []
+    for i in indices_of_code_cells(nb):
+        cell = nb.cells[i]
+        cid = cell.get("metadata", {}).get("cell_id")
+        if cid is None or not str(cid).strip():
+            raise ValueError(f"Code cell index {i} has no metadata.cell_id after ensure_cell_ids")
+        rows.append({"cell_id": str(cid).strip(), "source": _source_as_text(cell.source)})
+
+    payload = {"companion_version": 1, "notebook": nb_path.name, "cells": rows}
+    out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return out
