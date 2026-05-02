@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+# How many trailing characters to duplicate at top level for LLM tool JSON: long streams are
+# split across stdout_chunks; models often overweight early keys and under-read later chunks
+# ("lost in the middle" in long contexts). Surfacing the tail improves odds the final prints matter.
+STREAM_SUMMARY_TAIL_CHARS = 1536
+
 
 def chunk_text(text: str, max_chars: int = 6000) -> dict[str, str]:
     """Split text into numbered string chunks for JSON responses."""
@@ -33,3 +38,23 @@ def collect_streams(outputs: list[dict[str, Any]]) -> tuple[str, str]:
         elif name == "stderr":
             err_parts.append(txt)
     return "".join(out_parts), "".join(err_parts)
+
+
+def stream_summary_for_tool(
+    stdout_full: str,
+    stderr_full: str,
+    *,
+    stdout_chunks: dict[str, str],
+    stderr_chunks: dict[str, str],
+    tail_chars: int = STREAM_SUMMARY_TAIL_CHARS,
+) -> dict[str, Any]:
+    """Compact stream metadata plus trailing text for MCP / agent consumers."""
+
+    return {
+        "stdout_chars": len(stdout_full),
+        "stderr_chars": len(stderr_full),
+        "stdout_chunk_count": len(stdout_chunks),
+        "stderr_chunk_count": len(stderr_chunks),
+        "stdout_tail": stdout_full[-tail_chars:] if stdout_full else "",
+        "stderr_tail": stderr_full[-tail_chars:] if stderr_full else "",
+    }

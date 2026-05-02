@@ -138,6 +138,22 @@ Exact fields will move; approximate shape:
 
   "stderr_chunks": {},
 
+  "stream_summary": {
+
+    "stdout_chars": 0,
+
+    "stderr_chars": 0,
+
+    "stdout_chunk_count": 0,
+
+    "stderr_chunk_count": 0,
+
+    "stdout_tail": "",
+
+    "stderr_tail": ""
+
+  },
+
   "variable_preview_optional": { "examples": ["truncated repr / small value samples for requested names"] }
 
 }
@@ -151,6 +167,8 @@ Exact fields will move; approximate shape:
 - **python_env_snapshot:** answers “why does my result differ?”—fill aggressively in **`record`**, lighter in **`explore`**.
 
 - **suggested_figure_prefix:** lowers naming friction; models still name plots sensibly.
+
+- **stdout_chunks / stderr_chunks / stream_summary:** long text is split across numbered chunks; **`stream_summary`** duplicates the tail and counts at top level for models that skim early chunk keys before later ones.
 
 - **variable_preview_optional:** when requested—**values and behaviour**, not only dtypes (capped); see Variable previews section.
 
@@ -203,7 +221,7 @@ Saved output files on disk stay full quality for humans; previews in JSON stay s
 
 
 
-Use the **same chunking pattern** for both streams. Deferred: true streaming transports until proved necessary.
+Use the **same chunking pattern** for both streams. Also expose **`stream_summary`** (counts + trailing tails) so agents need not ingest every **`stdout_chunks`** key to notice the decisive final prints. Deferred: true streaming transports until proved necessary.
 
 
 

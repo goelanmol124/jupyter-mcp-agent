@@ -1,8 +1,13 @@
-# Changelog
+## Unreleased
 
-All notable changes to **llm-jupyter** will be documented in this file.
+### Added
 
-## [0.1.1] — publish polish
+- **`run` response `stream_summary`:** character totals, stdout/stderr chunk counts, and trailing stream text (~1.5k chars each) surfaced at top level alongside **`stdout_chunks`**.
+
+### Added (demos)
+
+- **`demos/agent_mcp_lab.ipynb`** — exercises multi-chunk stdout for MCP/agent tooling checks.
+
 
 ### Added
 

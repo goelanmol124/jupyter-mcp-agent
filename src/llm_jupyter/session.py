@@ -11,7 +11,7 @@ from jupyter_client import KernelManager
 from nbclient import NotebookClient
 from nbclient.exceptions import CellExecutionError
 
-from llm_jupyter.chunks import chunk_text, collect_streams
+from llm_jupyter.chunks import chunk_text, collect_streams, stream_summary_for_tool
 from llm_jupyter.companion import companion_path_for_notebook, validate_companion_file
 from llm_jupyter.env_snapshot import python_env_snapshot
 from llm_jupyter.manifest import append_manifest
@@ -378,6 +378,7 @@ class KernelSession:
         executed_in_order: list[int] = []
 
         if not indices:
+            sm = stream_summary_for_tool("", "", stdout_chunks={}, stderr_chunks={})
             payload = self._payload(
                 mode_eff,
                 path,
@@ -399,6 +400,7 @@ class KernelSession:
                 [],
                 [],
                 companion_summary,
+                sm,
             )
             stamp = notebook_file_stamp(path)
             append_manifest(
@@ -476,6 +478,15 @@ class KernelSession:
         stdout_joined = "\n".join(stdout_acc).strip()
         stderr_joined = "\n".join(stderr_acc).strip()
 
+        so_chunks = chunk_text(stdout_joined, self.chunk_chars) if stdout_joined else {}
+        se_chunks = chunk_text(stderr_joined, self.chunk_chars) if stderr_joined else {}
+        sm = stream_summary_for_tool(
+            stdout_joined,
+            stderr_joined,
+            stdout_chunks=so_chunks,
+            stderr_chunks=se_chunks,
+        )
+
         payload = self._payload(
             mode_eff,
             path,
@@ -488,8 +499,8 @@ class KernelSession:
             stale_notes,
             prefix_hint,
             out_files,
-            chunk_text(stdout_joined, self.chunk_chars) if stdout_joined else {},
-            chunk_text(stderr_joined, self.chunk_chars) if stderr_joined else {},
+            so_chunks,
+            se_chunks,
             t0,
             preview_rows,
             max_image_side,
@@ -497,6 +508,7 @@ class KernelSession:
             tbl,
             img,
             companion_summary,
+            sm,
         )
 
         append_manifest(
@@ -578,6 +590,7 @@ class KernelSession:
         table_preview: list | None = None,
         image_preview: list | None = None,
         companion_summary: dict[str, Any] | None = None,
+        stream_summary: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         stamp = notebook_file_stamp(notebook_path)
         env_snap = python_env_snapshot(mode)
@@ -603,6 +616,7 @@ class KernelSession:
             },
             "stdout_chunks": stdout_chunks,
             "stderr_chunks": stderr_chunks,
+            "stream_summary": stream_summary or {},
             "preview_rows_used": preview_rows,
             "max_image_side_used": max_image_side,
         }
