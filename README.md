@@ -98,6 +98,7 @@ Committed demos under **`demos/`** (with `manifest.jsonl` gitignored there):
 | [`demos/agent_demo_ols.ipynb`](demos/agent_demo_ols.ipynb) | OLS recovery under Gaussian noise |
 | [`demos/agent_demo_softmax.ipynb`](demos/agent_demo_softmax.ipynb) | Softmax temperature vs entropy |
 | [`demos/agent_demo_poisson.ipynb`](demos/agent_demo_poisson.ipynb) | Poisson rate + Wald CI |
+| [`demos/agent_demo_exponential.ipynb`](demos/agent_demo_exponential.ipynb) | Exponential mean vs **1/λ** |
 
 **MCP-style manual calls** (same handlers as `python -m llm_jupyter serve`):
 

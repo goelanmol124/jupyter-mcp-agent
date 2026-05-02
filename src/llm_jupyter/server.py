@@ -28,7 +28,11 @@ def _notebook_arg(notebook_default: Path | None, notebook_path: str | None) -> P
 def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: str) -> FastMCP:
     mcp = FastMCP(
         name="llm-jupyter",
-        instructions="Thin ipykernel notebook runner: use run(cell_id/run_all/run_until), kernel_* helpers, clears/validation as needed.",
+        instructions=(
+            "llm-jupyter: ipykernel notebook runner via run / kernel_* / validation / clear_outputs. "
+            "Relative notebook_path values resolve vs this process cwd (Cursor: keep mcp.json cwd=workspaceFolder). "
+            "Pass notebook_path when not targeting the server's default -n notebook."
+        ),
     )
     sess = KernelSession(notebook_default, roots, default_mode)
 
@@ -47,7 +51,10 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         companion_path: str | None = None,
         companion_strict: bool = False,
     ) -> dict[str, object]:
-        """Execute cells (one mode). Includes run_id. Same-stem `.apynb` is checked when present."""
+        """Execute cells (one mode). Includes run_id. Checks same-stem `.apynb` when present.
+
+        Relative notebook_path resolves against the MCP server's cwd (set cwd in mcp.json).
+        """
         try:
             return sess.run(
                 notebook_path=notebook_path,
@@ -119,7 +126,7 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         companion_path: str | None = None,
         companion_strict: bool = False,
     ) -> dict[str, object]:
-        """Cross-check `.apynb` sidecar vs code cells before running."""
+        """Cross-check `.apynb` vs code cells. Call after exporting the sidecar; paths resolve vs server cwd."""
         try:
             rep = sess.inspect_companion(
                 notebook_path=notebook_path,
