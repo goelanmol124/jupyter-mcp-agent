@@ -42,11 +42,15 @@ Optionally snapshot-test MCP tool definitions so summaries stay brief.
 
 
 
-### Variable previews (live kernel, for debugging)
+### Variable previews and “under the hood” behaviour
 
 
 
-Notebook files and PNGs rarely tell you **`df.shape`**, **missing-value counts**, or whether a gate variable flipped. For R&D triage—human or agent—expose an optional **`variable_preview`** (or similar): user- or assistant-selected names plus safe defaults (dims, dtypes, capped `repr`, sampling rules). Keeps debugging **grounded in RAM**, not guesses. Ship off by default until stable; behaviour must stay bounded so context isn’t drowned.
+Notebooks and PNGs show **endpoints**, not always the **path**. For R&D you care about **middle states and behaviour**: what the cell **actually produced** (text streams, return value, intermediate objects), not only whether a chart saved. Wrong branch, silent coercion, order-dependent mutation—all of that shows up in **how** the run unfolded, not only in `shape`.
+
+
+
+Expose optional **`variable_preview`** (or similar): **names the user or assistant chooses**, plus safe defaults—**capped values** (truncated `repr`, small samples), not only metadata. Pair with **rich execution records** (stdout/stderr chunks, structured previews, paths to heavier dumps on disk) so “under the hood” stays **inspectable** without pasting megabytes into chat. Default off until behaviour is stable; caps are mandatory.
 
 
 
@@ -132,7 +136,9 @@ Exact fields will move; approximate shape:
 
   "stdout_chunks": {},
 
-  "stderr_chunks": {}
+  "stderr_chunks": {},
+
+  "variable_preview_optional": { "examples": ["truncated repr / small value samples for requested names"] }
 
 }
 
@@ -146,6 +152,7 @@ Exact fields will move; approximate shape:
 
 - **suggested_figure_prefix:** lowers naming friction; models still name plots sensibly.
 
+- **variable_preview_optional:** when requested—**values and behaviour**, not only dtypes (capped); see Variable previews section.
 
 
 Keep **`outputs_might_be_stale`** truthful through any UI shortening; **never drop stderr silently.**

@@ -6,11 +6,13 @@ Notebook-style work fits **research**: change a small piece of code, run it, ins
 
 This project is building a **thin MCP server**: it runs a real **Python kernel**, updates **`.ipynb`** and output files, returns **predictable JSON**, and keeps **history** you can search—so **R&D workflows stay easy for both you and the model**, not only for shipping application code.
 
-### Interpreter state (“why did that number happen?”)
+### What’s under the hood (behaviour, not only structure)
 
-Much of scientific debugging is not “did the cell run?” but **what do the objects in memory actually look like?** Wrong shapes, dtypes, stray NaNs, flags that gate downstream logic, seed state—a plot or a `print()` can hide that. Those answers live **in the live kernel**, not only in saved notebook outputs.
+R&D debugging isn’t only **`shape` / dtypes**—it’s **how the run actually behaved**: what was **returned**, what **side effects** landed in memory, what **middle states** existed between “start cell” and “final plot.” Final outputs can look plausible while the trajectory was wrong (silent coercion, wrong branch, order-dependent state, a mutated object you forgot).
 
-So beside prints and previews, support **cheap, capped looks at named variables** (sizes, dtypes, truncated `repr`, tiny samples)—for you and for the assistant—without dumping whole frames into chat. Treat that as optional (see **`variable_preview`**) because it adds surface area and context cost, but the **purpose** is core for R&D: close the gap between “output looked fine” and “the computation was wrong.”
+You need ways to see **that story** without re-running blind: **captured stdout/stderr**, **last result / display** for a cell where that’s meaningful, **snapshots of chosen names** after a run (values, not just types), and room for **optional breadcrumbs** (logging hooks, stepping, or “dump these locals after cell X”)—always **capped** so chat context stays usable.
+
+Optional **`variable_preview`** and the **execution JSON** (streams, previews, paths) exist for this: make **behaviour and intermediate reality** inspectable for you and for the assistant, not only the polished surface of a figure.
 
 ## What we’re building
 
