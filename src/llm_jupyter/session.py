@@ -26,7 +26,6 @@ from llm_jupyter.notebook import (
 from llm_jupyter.paths import allowed_roots_for_notebook, is_under_roots, normalize_allowed_path
 from llm_jupyter.previews import previews_from_cells
 from llm_jupyter.stamp import notebook_file_stamp
-from llm_jupyter._hot_reload_stamp import STAMP as _HR_STAMP
 
 
 class KernelSession:
@@ -121,7 +120,6 @@ class KernelSession:
             "kernel_alive": alive,
             "interrupted_flag": self.interrupted,
             "full_top_to_bottom_at_generation": self.full_top_to_bottom_at_generation,
-            "hot_reload_stamp": _HR_STAMP,
         }
 
     def _ensure_kernel(self, art_prefix: str | None) -> None:
@@ -378,6 +376,7 @@ class KernelSession:
         stderr_acc: list[str] = []
         preview_pairs: list[tuple[Any, int]] = []
         executed_in_order: list[int] = []
+        execution_error: dict[str, str] | None = None
 
         if not indices:
             sm = stream_summary_for_tool("", "", stdout_chunks={}, stderr_chunks={})
@@ -403,6 +402,7 @@ class KernelSession:
                 [],
                 companion_summary,
                 sm,
+                None,
             )
             stamp = notebook_file_stamp(path)
             append_manifest(
@@ -457,6 +457,7 @@ class KernelSession:
                         stdout_acc.append(so)
                         stderr_acc.append(se)
                         preview_pairs.append((err_cell, idx))
+                        execution_error = {"ename": str(e.ename), "evalue": str(e.evalue)}
                         status = "error"
                         if halt_on_error:
                             break
@@ -515,6 +516,7 @@ class KernelSession:
             img,
             companion_summary,
             sm,
+            execution_error,
         )
 
         append_manifest(
@@ -597,6 +599,7 @@ class KernelSession:
         image_preview: list | None = None,
         companion_summary: dict[str, Any] | None = None,
         stream_summary: dict[str, Any] | None = None,
+        execution_error: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         stamp = notebook_file_stamp(notebook_path)
         env_snap = python_env_snapshot(mode)
@@ -630,6 +633,8 @@ class KernelSession:
             res["companion"] = companion_summary
         if error_cell_id:
             res["error_cell_id"] = error_cell_id
+        if execution_error is not None:
+            res["execution_error"] = execution_error
         if debug:
             res["debug"] = True
         return res

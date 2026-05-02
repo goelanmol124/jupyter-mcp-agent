@@ -3,6 +3,8 @@
 ### Added
 
 - **`run` response `stream_summary`:** character totals, stdout/stderr chunk counts, and trailing stream text (~1.5k chars each) surfaced at top level alongside **`stdout_chunks`**.
+- **`run` payload `execution_error`:** **`ename`** and **`evalue`** from the kernel after **`CellExecutionError`** (read before **`stderr_chunks`** when triaging).
+
 
 ### Added (demos)
 

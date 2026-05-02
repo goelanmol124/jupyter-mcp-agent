@@ -58,11 +58,11 @@ Expose optional **`variable_preview`** (or similar): **names the user or assista
 
 
 
-**Shipped:** **`export-apynb`**, **`companion_validate`**, and automatic **`run`** drift checks against same-stem **`.apynb`**. Prefer **`export-apynb` → `companion_validate` → `run`** when introducing sidecars.
+Implement **cell mutation tools before** introducing a companion file; add the companion file only if plain tools feel too awkward.
 
 
 
-Structural **`notebook_validate`** catches bad merges before kernel work.
+Structural checks **without running code** (`notebook_validate` flag) catch bad merges before hitting the kernel.
 
 
 
@@ -154,6 +154,8 @@ Exact fields will move; approximate shape:
 
   },
 
+  "execution_error_optional": {"ename": "NameError", "evalue": "name 'pi_est' is not defined"},
+
   "variable_preview_optional": { "examples": ["truncated repr / small value samples for requested names"] }
 
 }
@@ -162,13 +164,13 @@ Exact fields will move; approximate shape:
 
 
 
-- **notebook_file_stamp:** catches disk edits concurrent with assistant planning.  
+- **stdout_chunks / stderr_chunks / stream_summary:** long stdout/stderr chunk across numbered keys; **`stream_summary`** repeats counts and tail text at top level for agent-friendly scanning.
+
+- **execution_error (when applicable):** kernel **`CellExecutionError`** summary as **`ename`** / **`evalue`**; prefer over raw **`stderr_chunks`** when the failure is notebook code.
 
 - **python_env_snapshot:** answers “why does my result differ?”—fill aggressively in **`record`**, lighter in **`explore`**.
 
 - **suggested_figure_prefix:** lowers naming friction; models still name plots sensibly.
-
-- **stdout_chunks / stderr_chunks / stream_summary:** long text is split across numbered chunks; **`stream_summary`** duplicates the tail and counts at top level for models that skim early chunk keys before later ones.
 
 - **variable_preview_optional:** when requested—**values and behaviour**, not only dtypes (capped); see Variable previews section.
 
@@ -221,7 +223,7 @@ Saved output files on disk stay full quality for humans; previews in JSON stay s
 
 
 
-Use the **same chunking pattern** for both streams. Also expose **`stream_summary`** (counts + trailing tails) so agents need not ingest every **`stdout_chunks`** key to notice the decisive final prints. Deferred: true streaming transports until proved necessary.
+Use the **same chunking pattern** for both streams, plus **`stream_summary`** tails for easier LLM ingestion. Deferred: true streaming transports until proved necessary.
 
 
 

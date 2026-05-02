@@ -79,7 +79,7 @@ python -m llm_jupyter manifest-tail demos/agent_demo_markov.ipynb --last 8
 
 | Tool | Purpose |
 |------|---------|
-| `run` | One execution mode (`cell_id` / `run_all` / `run_until_cell_id`); **`run_id`**, chunked streams, top-level **`stream_summary`** (tail + counts), previews, stamps; same-stem **`.apynb`** checked when present |
+| `run` | One execution mode (`cell_id` / `run_all` / `run_until_cell_id`); **`run_id`**, chunked streams, top-level **`stream_summary`** (tail + counts), **`execution_error`** (**`ename`**, **`evalue`**) when a cell fails, previews, stamps; same-stem **`.apynb`** checked when present |
 | `kernel_restart` / `kernel_interrupt` / `kernel_status` | Kernel lifecycle (**`kernel_generation`** on restart) |
 | `clear_outputs` | Strip persisted outputs; optional **`clear_execution_counts`** |
 | `notebook_validate` | `nbformat` structural check |
