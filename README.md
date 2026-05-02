@@ -88,7 +88,7 @@ python -m llm_jupyter manifest-tail demos/agent_demo_markov.ipynb --last 8
 | `notebook_outline` | Read-only map: **`llm_jupyter_version`**, **`notebook_filename`**, **`code_cell_indices`**, per-cell **`cell_id`** / previews |
 | `notebook_validate` | `nbformat` structural check |
 | `companion_validate` | **`.apynb`** ↔ **`.ipynb`** before kernel work |
-| `server_info` | No-kernel wiring check: **`llm_jupyter_version`**, **`process_cwd`**, **`default_notebook_path`**, **`default_mode`**, **`tool_names`** (live register) |
+| `server_info` | No-kernel wiring check: **`llm_jupyter_version`**, **`tools_n`**, **`cursor_mcp_registry_key_hint`**, **`python_executable`**, paths, **`tool_names`** (live register) |
 
 **Security:** With **`serve -n`** set, writes are constrained to that notebook path and its parent (plus **`--roots`**). Omitting **`-n`** anchors each tool’s path separately — prefer **`-n`** in shared projects.
 

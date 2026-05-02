@@ -13,4 +13,8 @@ This repo targets **notebook-style research** with an LLM. When using or impleme
 - **Keep cell code small**: few functions, little try/except, light typing, no gratuitous production patterns. Let errors surface while exploring.
 - Prefer MCP **cell tools** or **companion file** over editing raw `.ipynb` JSON.
 
+## MCP visibility (automated/agent chats)
+
+**.cursor/mcp.json** declares **`llm-jupyter`** under **`mcpServers`**. Some agent/tool sessions register only **`cursor-ide-browser`**; enable **llm-jupyter** in Cursor’s MCP integrations and reload ([Cursor MCP help](https://cursor.com/help/customization/mcp)). A successful **`server_info`** response is proof the notebook MCP proc is live for that session—not just that the JSON file exists on disk.
+
 Detailed workflow: Cursor skill **`research-notebook-mcp-workflow`** — file `.cursor/skills/research-notebook-mcp-workflow/SKILL.md`.

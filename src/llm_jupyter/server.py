@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import traceback
 from pathlib import Path
 
@@ -17,6 +18,9 @@ from llm_jupyter.notebook import (
 )
 from llm_jupyter.paths import normalize_allowed_path
 from llm_jupyter.session import KernelSession
+
+# Canonical `mcpServers` key used in repo `.cursor/mcp.json` — matches Cursor MCP UI identifier.
+_CURSOR_MCP_REGISTRY_KEY = "llm-jupyter"
 
 
 def _notebook_arg(notebook_default: Path | None, notebook_path: str | None) -> Path:
@@ -47,6 +51,7 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
             "Each notebook_path gets its own ipykernel; pass the same notebook_path on run and kernel_* for that artefact. "
             "Prefer server_info (no kernel) when sanity-checking version/cwd/serve -n wiring in a new session; "
             "it also lists tool_names from this process—prefer that over guessing tool sets from prose. "
+            "This repo's .cursor/mcp.json registers the server under mcpServers key \"llm-jupyter\". "
             "kernel_restart / kernel_interrupt / kernel_status require notebook_path unless serve was started with -n "
             "(then omit for the default). Relative paths resolve vs server cwd. "
             "Call notebook_outline before run(..., cell_id=...) when you need cell ids. "
@@ -261,9 +266,10 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
 
     @mcp.tool(name="server_info")
     def server_info() -> dict[str, object]:
-        """No-kernel MCP smoke check: version, cwd, serve -n default, roots, mode, runtime tool_names.
+        """No-kernel MCP smoke check: version, tools_n, python path, cwd, serve -n default, tool_names list.
 
-        **tool_names** is the authoritative register from this process (beats stale README lists)."""
+        **tools_n** and **tool_names** come from FastMCP in this process. **cursor_mcp_registry_key_hint**
+        matches `.cursor/mcp.json`; use Cursor MCP settings/docs if agents cannot invoke tools at all."""
         nb_def = str(notebook_default.expanduser().resolve()) if notebook_default else None
         tool_names: list[str] = []
         tm = getattr(mcp, "_tool_manager", None)
@@ -275,6 +281,9 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         return {
             "status": "ok",
             "llm_jupyter_version": _LMJ_VERSION,
+            "tools_n": len(tool_names),
+            "cursor_mcp_registry_key_hint": _CURSOR_MCP_REGISTRY_KEY,
+            "python_executable": sys.executable,
             "process_cwd": os.getcwd(),
             "default_notebook_path": nb_def,
             "extra_roots_resolved": [str(p.expanduser().resolve()) for p in roots],
