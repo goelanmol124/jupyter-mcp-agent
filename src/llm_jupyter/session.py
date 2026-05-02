@@ -359,12 +359,21 @@ class KernelSession:
             rid0 = nb.cells[code_idx[0]].get("metadata", {}).get("cell_id") or "cell"
             first_id_short = str(rid0)[:8]
 
+        anchor_short = first_id_short
+        if indices:
+            i0 = indices[0]
+            c0 = nb.cells[i0]
+            if getattr(c0, "cell_type", "") == "code":
+                cid0 = str(c0.get("metadata", {}).get("cell_id", "")).strip()
+                if cid0:
+                    anchor_short = cid0[:8]
+
         self._ensure_kernel(art_prefix=os.environ.get("LLM_NB_ART_PREFIX"))
 
         from datetime import UTC, datetime
 
         prefix_hint = (
-            f"{datetime.now(UTC).strftime('%Y%m%d')}_gen{self.kernel_generation}_{first_id_short}"
+            f"{datetime.now(UTC).strftime('%Y%m%d')}_gen{self.kernel_generation}_{anchor_short}"
         )
 
         if mode_eff == "record" and prefix_hint:

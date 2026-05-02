@@ -14,6 +14,8 @@
 ### Fixed
 
 - **`run` on cell errors:** **`CellExecutionError`** from **nbclient** does not expose `.cell`; the handler now uses the notebook node from the execution loop. Previously this raised **`AttributeError`**, cluttered **`stderr_chunks`** with llm-jupyter’s own traceback, and left **`cells_executed`** empty and **`error_cell_id`** unset.
+- **`suggested_figure_prefix`:** Prefix slug now derives from the **first cell executed in this `run`** (the first index of the selected sweep), not always the notebook’s **first code cell**. Targeted **`run(cell_id=…)`** or **`run_until`** mid-notebook prefixes were misleading for **`LLM_NB_ART_PREFIX`** and output-file discovery.
+
 
 ### Added
 

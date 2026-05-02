@@ -150,7 +150,7 @@ Exact fields will move; approximate shape:
 
 - **python_env_snapshot:** answers “why does my result differ?”—fill aggressively in **`record`**, lighter in **`explore`**.
 
-- **suggested_figure_prefix:** lowers naming friction; models still name plots sensibly.
+- **suggested_figure_prefix:** date + **`kernel_generation`** + short id of the **first cell executed in this `run`** (not always the notebook’s first code cell) so **`cell_id`**-only sweeps hint at the right artefacts.
 
 - **variable_preview_optional:** when requested—**values and behaviour**, not only dtypes (capped); see Variable previews section.
 
@@ -211,7 +211,7 @@ Use the **same chunking pattern** for both streams. Deferred: true streaming tra
 
 
 
-Aim for: **`cells_apply`**, **`run`**, **`notebook_outline`** (read-only cell map — keeps **`cell_id` discovery cheap), one **`kernel`** group (`restart`, `interrupt`, optionally `status`), optional **`clear_outputs`**, optional **`notebook_validate`**.
+Aim for: **`cells_apply`**, **`run`**, one **`kernel`** group (`restart`, `interrupt`, optionally `status`), optional **`clear_outputs`**, optional **`notebook_validate`**.
 
 
 
