@@ -12,7 +12,7 @@ disable-model-invocation: true
 
 ## Current MCP server (repo `llm_jupyter`): what exists today
 
-- Tools are typically **`run`**, **`kernel_*`**, **`clear_outputs`**, **`notebook_validate`**. **`variable_preview`**, **companion YAML/JSON**, and **`cells_apply`** are **design targets**—do not assume they exist; edit notebooks in Cursor’s UI unless your install added them.
+- Tools are **`run`**, **`kernel_*`**, **`clear_outputs`**, **`notebook_validate`**, **`companion_validate`**. Optional **`.apynb`** sidecar (same stem as the `.ipynb`): when that file exists, **`run`** cross-checks code-cell sources and `metadata.cell_id` before executing; use **`companion_strict=true`** to require a sidecar. **`variable_preview`** and **`cells_apply`** are **design targets**—do not assume they exist unless your install added them.
 - With the repo’s **project-level MCP file** `.cursor/mcp.json` (see README): **reload Cursor** so `llm-jupyter` registers; otherwise run `python scripts/agent_mcp_selftest.py …` from the repo root to hit the same code path.
 - **`run`** requires **exactly one** intent: **`cell_id`**, **`run_all=true`**, or **`run_until_cell_id`**. Passing more than one is an error (avoids silent “`cell_id` wins” bugs).
 - Every execution returns **`run_id`** and appends it to **`manifest.jsonl`** next to the notebook—**cite `run_id` in chat** when you want durable cross-turn memory of a specific execute.
@@ -36,7 +36,7 @@ disable-model-invocation: true
 
 ## MCP usage habits
 
-- Edit cells through **MCP cell tools** or the **companion file**—avoid hand-editing raw `.ipynb` JSON as the default path.
+- Prefer editing in Cursor’s notebook UI; optional **`.apynb`** JSON (`companion_version`, `cells` with `cell_id` + `source` per **code cell in order**) is for agents and scripts—keep it in sync with the notebook or validation fails before **`run`**. **`companion_validate`** checks drift without executing.
 - Prefer **`run_all`** or **`run_until`** when reproducibility of the chain matters; note **`explore`** vs **`record`** when conclusions or shared figures matter.
 - Name plot files using **server hints** (`suggested_figure_prefix` / `LLM_NB_ART_PREFIX`) so runs stay traceable in logs.
 

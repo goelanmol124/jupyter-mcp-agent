@@ -12,6 +12,7 @@ from nbclient import NotebookClient
 from nbclient.exceptions import CellExecutionError
 
 from llm_jupyter.chunks import chunk_text, collect_streams
+from llm_jupyter.companion import companion_path_for_notebook, validate_companion_file
 from llm_jupyter.env_snapshot import python_env_snapshot
 from llm_jupyter.manifest import append_manifest
 from llm_jupyter.notebook import (
@@ -167,6 +168,65 @@ class KernelSession:
         if not is_under_roots(cand, anchors):
             raise PermissionError(f"Notebook path not under allowed roots: {notebook_path}")
 
+    def _companion_gate(
+        self,
+        notebook_path: Path,
+        nb: Any,
+        companion_path: str | None,
+        companion_strict: bool,
+    ) -> dict[str, Any]:
+        """Validate optional .apynb sidecar against code cells."""
+
+        def _summarize(vf: Path, result: dict[str, Any]) -> dict[str, Any]:
+            return {
+                "status": "ok",
+                "companion_file": str(vf),
+                "code_cells_checked": result["companion_code_cells_checked"],
+            }
+
+        if companion_path:
+            cf = normalize_allowed_path(companion_path)
+            self.check_allowed_notebook(cf)
+            if not cf.is_file():
+                raise FileNotFoundError(f"Companion file not found: {cf}")
+            vr = validate_companion_file(notebook_path=notebook_path, notebook=nb, companion_file=cf)
+            return _summarize(cf, vr)
+
+        side = companion_path_for_notebook(notebook_path)
+        if not side.exists():
+            if companion_strict:
+                raise FileNotFoundError(
+                    f"companion_strict=true but companion file missing: expected {side}",
+                )
+            return {"status": "skipped", "note": "No same-stem .apynb beside this notebook."}
+
+        self.check_allowed_notebook(side)
+        vr = validate_companion_file(notebook_path=notebook_path, notebook=nb, companion_file=side)
+        return _summarize(side, vr)
+
+    def inspect_companion(
+        self,
+        notebook_path: str | None = None,
+        companion_path: str | None = None,
+        companion_strict: bool = False,
+    ) -> dict[str, Any]:
+        """Load notebook and validate companion only (no kernel)."""
+        nb_path_arg = notebook_path or (str(self.default_notebook) if self.default_notebook else "")
+        if not str(nb_path_arg).strip():
+            raise ValueError(
+                "notebook_path is required unless the MCP server started with --notebook / -n.",
+            )
+        path = normalize_allowed_path(nb_path_arg)
+        if not path.exists():
+            raise FileNotFoundError(f"Notebook not found: {path}")
+        self.check_allowed_notebook(path)
+        ensure_cell_ids(load_notebook(path), persist_path=path)
+        nb = load_notebook(path)
+        validate_notebook_node(nb)
+        return self._companion_gate(
+            path, nb, self._strip_opt(companion_path), companion_strict
+        )
+
     @staticmethod
     def _strip_opt(s: str | None) -> str | None:
         if s is None:
@@ -251,6 +311,8 @@ class KernelSession:
         max_image_side: int = 256,
         validate_first: bool = True,
         debug: bool = False,
+        companion_path: str | None = None,
+        companion_strict: bool = False,
     ) -> dict[str, Any]:
         t0 = time.monotonic()
         mode_eff = (mode or self.default_mode).lower()
@@ -277,6 +339,10 @@ class KernelSession:
         nb = load_notebook(path)
         if validate_first:
             validate_notebook_node(nb)
+
+        companion_summary = self._companion_gate(
+            path, nb, self._strip_opt(companion_path), companion_strict
+        )
 
         run_id = uuid.uuid4().hex[:12]
 
@@ -332,6 +398,7 @@ class KernelSession:
                 debug,
                 [],
                 [],
+                companion_summary,
             )
             stamp = notebook_file_stamp(path)
             append_manifest(
@@ -347,6 +414,7 @@ class KernelSession:
                     "cells_executed": [],
                     "status": "ok",
                     "note": "no_code_cells",
+                    "companion": companion_summary,
                 },
             )
             self._generation_at_previous_tool_end = self.kernel_generation
@@ -428,6 +496,7 @@ class KernelSession:
             debug,
             tbl,
             img,
+            companion_summary,
         )
 
         append_manifest(
@@ -444,6 +513,7 @@ class KernelSession:
                 "status": status,
                 "stderr_digest_tail": stderr_joined[-512:],
                 "halt_on_error": halt_on_error,
+                "companion": companion_summary,
             },
         )
 
@@ -507,6 +577,7 @@ class KernelSession:
         debug: bool,
         table_preview: list | None = None,
         image_preview: list | None = None,
+        companion_summary: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         stamp = notebook_file_stamp(notebook_path)
         env_snap = python_env_snapshot(mode)
@@ -535,6 +606,8 @@ class KernelSession:
             "preview_rows_used": preview_rows,
             "max_image_side_used": max_image_side,
         }
+        if companion_summary is not None:
+            res["companion"] = companion_summary
         if error_cell_id:
             res["error_cell_id"] = error_cell_id
         if debug:

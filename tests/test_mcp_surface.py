@@ -14,6 +14,7 @@ def test_mcp_tool_surface_is_small():
         "kernel_status",
         "clear_outputs",
         "notebook_validate",
+        "companion_validate",
     }
     for t in tools:
         desc = (t.description or "").strip()

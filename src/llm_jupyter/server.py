@@ -44,8 +44,10 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         max_image_side: int = 256,
         validate_first: bool = True,
         debug: bool = False,
+        companion_path: str | None = None,
+        companion_strict: bool = False,
     ) -> dict[str, object]:
-        """Execute code cells: pass exactly ONE of cell_id, run_all=true, or run_until_cell_id. Response includes run_id (duplicate in manifest.jsonl)."""
+        """Execute cells (one mode). Includes run_id. Same-stem `.apynb` is checked when present."""
         try:
             return sess.run(
                 notebook_path=notebook_path,
@@ -58,6 +60,8 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
                 max_image_side=max_image_side,
                 validate_first=validate_first,
                 debug=debug,
+                companion_path=companion_path,
+                companion_strict=companion_strict,
             )
         except Exception as e:
             return {"status": "error", "tool_error": str(e), "traceback": traceback.format_exc()}
@@ -108,5 +112,22 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         sess.check_allowed_notebook(nb_path)
         try_validate_notebook_file(nb_path)
         return {"status": "ok", "notebook_path": str(nb_path)}
+
+    @mcp.tool(name="companion_validate")
+    def companion_validate(
+        notebook_path: str | None = None,
+        companion_path: str | None = None,
+        companion_strict: bool = False,
+    ) -> dict[str, object]:
+        """Cross-check `.apynb` sidecar vs code cells before running."""
+        try:
+            rep = sess.inspect_companion(
+                notebook_path=notebook_path,
+                companion_path=companion_path,
+                companion_strict=companion_strict,
+            )
+            return {"status": "ok", "report": rep}
+        except Exception as e:
+            return {"status": "error", "tool_error": str(e), "traceback": traceback.format_exc()}
 
     return mcp

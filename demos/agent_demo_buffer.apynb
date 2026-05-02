@@ -1,0 +1,18 @@
+{
+  "companion_version": 1,
+  "notebook": "agent_demo_buffer.ipynb",
+  "cells": [
+    {
+      "cell_id": "11111111-1111-4111-8111-111111111101",
+      "source": "import numpy as np\nrng = np.random.default_rng(3)\n"
+    },
+    {
+      "cell_id": "11111111-1111-4111-8111-111111111102",
+      "source": "x = rng.normal(0, 1, size=(200,)).cumsum()\nwindow = 12\n"
+    },
+    {
+      "cell_id": "11111111-1111-4111-8111-111111111103",
+      "source": "roll = np.convolve(x, np.ones(window) / window, mode=\"valid\")\nprint(\"last_smoothed\", float(roll[-1]), \"raw_last\", float(x[-1]))\n"
+    }
+  ]
+}

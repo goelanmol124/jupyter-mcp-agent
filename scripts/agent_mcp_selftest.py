@@ -38,7 +38,13 @@ async def invoke_tool(tool: str, args: dict[str, object], nb: Path):
     return await tm.call_tool(tool, args, context=None, convert_result=False)
 
 
-async def async_main(tool: str, args_raw: list[str], notebook: str):
+async def async_main(
+    tool: str,
+    args_raw: list[str],
+    notebook: str,
+    companion_path: str | None,
+    companion_strict: bool,
+):
     root = repo_root()
     nb_path = Path(notebook)
     nb = nb_path if nb_path.is_absolute() else root / notebook
@@ -70,6 +76,11 @@ async def async_main(tool: str, args_raw: list[str], notebook: str):
             except ValueError:
                 args[k] = v
 
+    if companion_path is not None:
+        args["companion_path"] = companion_path
+    if companion_strict:
+        args["companion_strict"] = True
+
     out = await invoke_tool(tool, args, nb)
 
     print(json.dumps(out, indent=2, default=str))
@@ -88,6 +99,16 @@ def main() -> None:
         action="store_true",
         help="Print code cell indexes, metadata.cell_id, first line; persist ids if missing.",
     )
+    p.add_argument(
+        "--companion-path",
+        default=None,
+        help="Optional explicit companion file (else same-stem .apynb auto if present)",
+    )
+    p.add_argument(
+        "--companion-strict",
+        action="store_true",
+        help="Require a companion file (same-stem .apynb or --companion-path)",
+    )
     p.add_argument("tool", nargs="?", default="run")
     p.add_argument("kv", nargs="*", help="kwargs as key=value (e.g. run_all=true)")
     args = p.parse_args()
@@ -100,7 +121,15 @@ def main() -> None:
             raise SystemExit(f"Missing notebook {nb}")
         list_code_cell_ids(nb)
         return
-    asyncio.run(async_main(args.tool, args.kv, args.notebook))
+    asyncio.run(
+        async_main(
+            args.tool,
+            args.kv,
+            args.notebook,
+            args.companion_path,
+            args.companion_strict,
+        )
+    )
 
 
 if __name__ == "__main__":
