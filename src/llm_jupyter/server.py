@@ -27,6 +27,17 @@ def _notebook_arg(notebook_default: Path | None, notebook_path: str | None) -> P
     return normalize_allowed_path(raw)
 
 
+def _mcp_tool_error(tool: str, exc: BaseException) -> dict[str, object]:
+    """Consistent failure envelope so agents can attribute errors (and match server build)."""
+    return {
+        "status": "error",
+        "llm_jupyter_version": _LMJ_VERSION,
+        "tool": tool,
+        "tool_error": str(exc),
+        "traceback": traceback.format_exc(),
+    }
+
+
 def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: str) -> FastMCP:
     mcp = FastMCP(
         name="llm-jupyter",
@@ -37,7 +48,8 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
             "(then omit for the default). Relative paths resolve vs server cwd. "
             "Call notebook_outline before run(..., cell_id=...) when you need cell ids. "
             "Tool replies include llm_jupyter_version; if it disagrees with the repo you are editing, "
-            "the MCP Python env is probably not loading workspace src (see mcp.json PYTHONPATH)."
+            "the MCP Python env is probably not loading workspace src (see mcp.json PYTHONPATH). "
+            "On failures, status:error payloads include \"tool\" (which handler failed) plus tool_error/traceback."
         ),
     )
     sess = KernelSession(notebook_default, roots, default_mode)
@@ -66,6 +78,10 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         (often faster to read than **`stderr_chunks`** / ANSI tracebacks). **`companion`** is omitted
         when validation was skipped because no sidecar exists (saves repetition).
 
+        Pre-notebook **`Exception`** surfaces (permissions, nbformat validation, ambiguous run selector) yield
+        **`status`: `error`** with **`tool`**, **`llm_jupyter_version`**, **`tool_error`**, **`traceback`**
+        (different from kernel **`execution_error`** on **`status`: `ok`/`error` runs).
+
         Relative notebook_path resolves against the MCP server's cwd (set cwd in mcp.json).
         """
         try:
@@ -84,7 +100,7 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
                 companion_strict=companion_strict,
             )
         except Exception as e:
-            return {"status": "error", "tool_error": str(e), "traceback": traceback.format_exc()}
+            return _mcp_tool_error("run", e)
 
     @mcp.tool(name="kernel_restart")
     def kernel_restart(
@@ -112,29 +128,44 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         validate_after: bool = True,
     ) -> dict[str, object]:
         """Strip persisted outputs from code cells; optional execution_count reset."""
-        nb_path = _notebook_arg(notebook_default, notebook_path)
-        sess.check_allowed_notebook(nb_path)
-        if validate_before:
-            try_validate_notebook_file(nb_path)
-        nb = load_notebook(nb_path)
-        for cell in nb.cells:
-            if cell.cell_type != "code":
-                continue
-            cell.outputs = []
-            if clear_execution_counts:
-                cell.execution_count = None
-        save_notebook(nb, nb_path)
-        if validate_after:
-            try_validate_notebook_file(nb_path)
-        return {"status": "ok", "notebook_path": str(nb_path), "note": "outputs_cleared"}
+        try:
+            nb_path = _notebook_arg(notebook_default, notebook_path)
+            sess.check_allowed_notebook(nb_path)
+            if validate_before:
+                try_validate_notebook_file(nb_path)
+            nb = load_notebook(nb_path)
+            for cell in nb.cells:
+                if cell.cell_type != "code":
+                    continue
+                cell.outputs = []
+                if clear_execution_counts:
+                    cell.execution_count = None
+            save_notebook(nb, nb_path)
+            if validate_after:
+                try_validate_notebook_file(nb_path)
+            return {
+                "status": "ok",
+                "llm_jupyter_version": _LMJ_VERSION,
+                "notebook_path": str(nb_path),
+                "note": "outputs_cleared",
+            }
+        except Exception as e:
+            return _mcp_tool_error("clear_outputs", e)
 
     @mcp.tool(name="notebook_validate")
     def notebook_validate(notebook_path: str | None = None) -> dict[str, object]:
         """Structural nbformat validation (no execution)."""
-        nb_path = _notebook_arg(notebook_default, notebook_path)
-        sess.check_allowed_notebook(nb_path)
-        try_validate_notebook_file(nb_path)
-        return {"status": "ok", "notebook_path": str(nb_path)}
+        try:
+            nb_path = _notebook_arg(notebook_default, notebook_path)
+            sess.check_allowed_notebook(nb_path)
+            try_validate_notebook_file(nb_path)
+            return {
+                "status": "ok",
+                "llm_jupyter_version": _LMJ_VERSION,
+                "notebook_path": str(nb_path),
+            }
+        except Exception as e:
+            return _mcp_tool_error("notebook_validate", e)
 
     @mcp.tool(name="notebook_outline")
     def notebook_outline(
@@ -148,52 +179,55 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         **`llm_jupyter_version`** identifies the running server code; **`notebook_path`** stays absolute for disambiguation.
         Use before **run**(cell_id=...) instead of reading raw .ipynb JSON (large / easy to mis-copy).
         """
-        nb_path = _notebook_arg(notebook_default, notebook_path)
-        sess.check_allowed_notebook(nb_path)
-        try_validate_notebook_file(nb_path)
-        nb = load_notebook(nb_path)
-        if persist_cell_ids:
-            ensure_cell_ids(nb, persist_path=nb_path)
-        cap = max(48, min(int(preview_chars), 2000))
+        try:
+            nb_path = _notebook_arg(notebook_default, notebook_path)
+            sess.check_allowed_notebook(nb_path)
+            try_validate_notebook_file(nb_path)
+            nb = load_notebook(nb_path)
+            if persist_cell_ids:
+                ensure_cell_ids(nb, persist_path=nb_path)
+            cap = max(48, min(int(preview_chars), 2000))
 
-        def _src_text(cell_src: str | list[str]) -> str:
-            if isinstance(cell_src, list):
-                return "".join(cell_src)
-            return str(cell_src)
+            def _src_text(cell_src: str | list[str]) -> str:
+                if isinstance(cell_src, list):
+                    return "".join(cell_src)
+                return str(cell_src)
 
-        rows: list[dict[str, object]] = []
-        code_n = 0
-        code_indices: list[int] = []
-        for i, cell in enumerate(nb.cells):
-            ctype = str(cell.get("cell_type", ""))
-            meta = cell.get("metadata") if isinstance(cell.get("metadata"), dict) else {}
-            cid = meta.get("cell_id") if ctype == "code" else None
-            raw = _src_text(cell.source)
-            snippet = raw.strip("\n")
-            if len(snippet) > cap:
-                snippet = snippet[: max(1, cap - 3)] + "..."
-            row: dict[str, object] = {
-                "index": i,
-                "cell_type": ctype,
-                "cell_id": cid if ctype == "code" else None,
-                "source_preview": snippet,
+            rows: list[dict[str, object]] = []
+            code_n = 0
+            code_indices: list[int] = []
+            for i, cell in enumerate(nb.cells):
+                ctype = str(cell.get("cell_type", ""))
+                meta = cell.get("metadata") if isinstance(cell.get("metadata"), dict) else {}
+                cid = meta.get("cell_id") if ctype == "code" else None
+                raw = _src_text(cell.source)
+                snippet = raw.strip("\n")
+                if len(snippet) > cap:
+                    snippet = snippet[: max(1, cap - 3)] + "..."
+                row: dict[str, object] = {
+                    "index": i,
+                    "cell_type": ctype,
+                    "cell_id": cid if ctype == "code" else None,
+                    "source_preview": snippet,
+                }
+                rows.append(row)
+                if ctype == "code":
+                    code_n += 1
+                    code_indices.append(i)
+
+            return {
+                "status": "ok",
+                "llm_jupyter_version": _LMJ_VERSION,
+                "notebook_filename": nb_path.name,
+                "code_cell_count": code_n,
+                "code_cell_indices": code_indices,
+                "notebook_path": str(nb_path.resolve()),
+                "persist_cell_ids_used": bool(persist_cell_ids),
+                "preview_chars_used": cap,
+                "cells": rows,
             }
-            rows.append(row)
-            if ctype == "code":
-                code_n += 1
-                code_indices.append(i)
-
-        return {
-            "status": "ok",
-            "llm_jupyter_version": _LMJ_VERSION,
-            "notebook_filename": nb_path.name,
-            "code_cell_count": code_n,
-            "code_cell_indices": code_indices,
-            "notebook_path": str(nb_path.resolve()),
-            "persist_cell_ids_used": bool(persist_cell_ids),
-            "preview_chars_used": cap,
-            "cells": rows,
-        }
+        except Exception as e:
+            return _mcp_tool_error("notebook_outline", e)
 
     @mcp.tool(name="companion_validate")
     def companion_validate(
@@ -208,9 +242,9 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
                 companion_path=companion_path,
                 companion_strict=companion_strict,
             )
-            return {"status": "ok", "report": rep}
+            return {"status": "ok", "llm_jupyter_version": _LMJ_VERSION, "report": rep}
         except Exception as e:
-            return {"status": "error", "tool_error": str(e), "traceback": traceback.format_exc()}
+            return _mcp_tool_error("companion_validate", e)
 
     # Let local tooling (e.g. scripts/agent_mcp_selftest.py) shut down kernels cleanly between calls.
     mcp._llm_kernel_session = sess  # noqa: SLF001

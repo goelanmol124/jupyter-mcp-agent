@@ -91,6 +91,8 @@ python -m llm_jupyter manifest-tail demos/agent_demo_markov.ipynb --last 8
 
 **Security:** With **`serve -n`** set, writes are constrained to that notebook path and its parent (plus **`--roots`**). Omitting **`-n`** anchors each tool’s path separately — prefer **`-n`** in shared projects.
 
+**Tool errors:** If a handler raises (bad path, validation, etc.), the MCP tool returns JSON with **`status: error`**, **`tool`**, **`llm_jupyter_version`**, **`tool_error`**, and **`traceback`** (distinct from kernel **`execution_error`** on **`run`** when a cell fails).
+
 ## Tests
 
 ```bash
