@@ -1,5 +1,12 @@
 ## Unreleased
 
+### Changed
+
+- **`run` response shape (agent ergonomics):** First key **`assistant_quick`** summarizes status, staleness hint, **`error_one_liner`**, and stream bulk in one skim object. **`execution_error`** appears immediately after **`status`**. **`companion`** is omitted when the sidecar gate was **`skipped`** (no same-stem **`.apynb`**), reducing repetitive noise. **`stream_summary`** and metadata stay above **`stdout_chunks`** / **`stderr_chunks`**; file stamp and **`python_env_snapshot`** remain near the tail.
+- **`.cursor/mcp.json`:** Default **`llm-jupyter`** args no longer include **`serve --watch`** (fewer transient MCP errors while Cursor holds a long-lived stdio session).
+- **`kernel_*` MCP tools:** pass **`notebook_path`** for the notebook whose kernel you mean (omit only when **`serve -n`** is that notebook); responses include **`notebook_path`** plus **`notebook_kernel_active`** (**`kernel_status`** only) until **`run`** or **`kernel_restart`** touches that notebook.
+- Documentation pass: README tool list + Cursor MCP snippet; PRD / IMPLEMENTATION aligned with shipped **`.apynb`** companions and CLI (`export-apynb`, `manifest-tail`).
+
 ### Added
 
 - **`run` response `stream_summary`:** character totals, stdout/stderr chunk counts, and trailing stream text (~1.5k chars each) surfaced at top level alongside **`stdout_chunks`**.
@@ -15,13 +22,6 @@
 
 - **`run` on cell errors:** **`CellExecutionError`** from **nbclient** does not expose `.cell`; the handler now uses the notebook node from the execution loop. Previously this raised **`AttributeError`**, cluttered **`stderr_chunks`** with llm-jupyter’s own traceback, and left **`cells_executed`** empty and **`error_cell_id`** unset.
 - **`suggested_figure_prefix`:** Prefix slug now derives from the **first cell executed in this `run`** (the first index of the selected sweep), not always the notebook’s **first code cell**.
-
-### Changed
-
-- **`.cursor/mcp.json`:** Default **`llm-jupyter`** args no longer include **`serve --watch`** (fewer transient MCP errors while Cursor holds a long-lived stdio session).
-- **`kernel_*` MCP tools:** pass **`notebook_path`** for the notebook whose kernel you mean (omit only when **`serve -n`** is that notebook); responses include **`notebook_path`** plus **`notebook_kernel_active`** (**`kernel_status`** only) until **`run`** or **`kernel_restart`** touches that notebook.
-- Documentation pass: README tool list + Cursor MCP snippet; PRD / IMPLEMENTATION aligned with shipped **`.apynb`** companions and CLI (`export-apynb`, `manifest-tail`).
-
 
 ## [0.1.1] — publish polish
 

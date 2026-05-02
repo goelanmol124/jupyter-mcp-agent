@@ -728,37 +728,68 @@ class KernelSession:
         stamp = notebook_file_stamp(notebook_path)
         env_snap = python_env_snapshot(mode)
         elapsed_ms = int((time.monotonic() - t0) * 1000)
-        res: dict[str, Any] = {
+        sm_eff = stream_summary or {}
+        uch, sch = sm_eff.get("stdout_chars") or 0, sm_eff.get("stderr_chars") or 0
+        if uch + sch == 0:
+            stream_capture_hint = "no captured stdout/stderr"
+        else:
+            stream_capture_hint = (
+                f"stdout ~{uch} chars ({sm_eff.get('stdout_chunk_count', 0)} chunks); "
+                f"stderr ~{sch} chars ({sm_eff.get('stderr_chunk_count', 0)} chunks)"
+            )
+
+        error_one_liner: str | None = None
+        if execution_error is not None:
+            raw = f"{execution_error['ename']}: {execution_error['evalue']}"
+            error_one_liner = raw if len(raw) <= 380 else raw[:377] + "..."
+
+        assistant_quick: dict[str, Any] = {
+            "notebook_filename": notebook_path.name,
             "run_id": run_id,
-            "mode": mode,
-            "kernel_generation": kernel_generation,
-            "cells_executed": cells_executed,
             "status": status,
+            "cells_executed_n": len(cells_executed),
+            "kernel_generation": kernel_generation,
             "restart_since_previous_tool_call": restart_since_previous,
             "outputs_might_be_stale": outputs_might_be_stale,
-            "stale_notes": stale_notes,
-            "notebook_path": str(notebook_path),
-            "notebook_file_stamp": stamp,
-            "python_env_snapshot": env_snap,
-            "kernel_runtime_ms": elapsed_ms,
-            "suggested_figure_prefix": suggested_figure_prefix,
-            "output_files": output_files,
-            "previews": {
-                "tables": table_preview or [],
-                "images": image_preview or [],
-            },
-            "stdout_chunks": stdout_chunks,
-            "stderr_chunks": stderr_chunks,
-            "stream_summary": stream_summary or {},
-            "preview_rows_used": preview_rows,
-            "max_image_side_used": max_image_side,
+            "stale_primary_note": stale_notes[0] if stale_notes else None,
+            "error_one_liner": error_one_liner,
+            "stream_capture": stream_capture_hint,
         }
-        if companion_summary is not None:
-            res["companion"] = companion_summary
-        if error_cell_id:
-            res["error_cell_id"] = error_cell_id
+
+        # Outcomes first for primacy/recency bias; chunks and env blobs last.
+        res: dict[str, Any] = {
+            "assistant_quick": assistant_quick,
+            "run_id": run_id,
+            "mode": mode,
+            "status": status,
+        }
         if execution_error is not None:
             res["execution_error"] = execution_error
+        if error_cell_id:
+            res["error_cell_id"] = error_cell_id
+        res.update(
+            {
+                "cells_executed": cells_executed,
+                "kernel_generation": kernel_generation,
+                "restart_since_previous_tool_call": restart_since_previous,
+                "outputs_might_be_stale": outputs_might_be_stale,
+                "stale_notes": stale_notes,
+                "notebook_path": str(notebook_path),
+                "stream_summary": sm_eff,
+                "suggested_figure_prefix": suggested_figure_prefix,
+                "output_files": output_files,
+                "previews": {"tables": table_preview or [], "images": image_preview or []},
+                "stdout_chunks": stdout_chunks,
+                "stderr_chunks": stderr_chunks,
+                "preview_rows_used": preview_rows,
+                "max_image_side_used": max_image_side,
+                "kernel_runtime_ms": elapsed_ms,
+                "notebook_file_stamp": stamp,
+                "python_env_snapshot": env_snap,
+            },
+        )
+        if companion_summary is not None and companion_summary.get("status") != "skipped":
+            res["companion"] = companion_summary
         if debug:
             res["debug"] = True
         return res

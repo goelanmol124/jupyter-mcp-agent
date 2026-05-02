@@ -56,8 +56,12 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
     ) -> dict[str, object]:
         """Execute cells (one mode). Includes run_id. Checks same-stem `.apynb` when present.
 
+        **`assistant_quick`** at the top is a skim block (status, error one-liner, stale note,
+        stream size hint) ahead of previews and chunked streams.
+
         On failed cells, top-level **`execution_error`** carries **`ename`** and **`evalue`** from the kernel
-        (often faster to read than **`stderr_chunks`** / ANSI tracebacks).
+        (often faster to read than **`stderr_chunks`** / ANSI tracebacks). **`companion`** is omitted
+        when validation was skipped because no sidecar exists (saves repetition).
 
         Relative notebook_path resolves against the MCP server's cwd (set cwd in mcp.json).
         """
