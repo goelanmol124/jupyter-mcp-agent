@@ -11,6 +11,6 @@ This repo targets **notebook-style research** with an LLM. When using or impleme
 - Trace **data flow** and **middle states**—not only final outputs. Use MCP **variable previews** when something is ambiguous.
 - **Debug** with kernel truth: respect **stale-output** hints and **`kernel_generation`** after restarts; rerun chains when diagnosing.
 - **Keep cell code small**: few functions, little try/except, light typing, no gratuitous production patterns. Let errors surface while exploring.
-- Prefer MCP **`run`** plus optional **`.apynb`** sidecars (`export-apynb`, `companion_validate`) over editing raw `.ipynb` JSON. **`variable_preview`** is not shipped yet — use streams and disk artefacts.
+- Prefer MCP **cell tools** or **companion file** over editing raw `.ipynb` JSON.
 
 Detailed workflow: Cursor skill **`research-notebook-mcp-workflow`** — file `.cursor/skills/research-notebook-mcp-workflow/SKILL.md`.

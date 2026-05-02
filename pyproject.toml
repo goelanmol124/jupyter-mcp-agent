@@ -31,7 +31,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "watchfiles>=0.21"]
 release = ["build>=1.2", "twine>=5.0"]
 
 [project.scripts]

@@ -3,10 +3,31 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 from llm_jupyter.server import build_mcp
+
+
+def _serve_child_argv(args: argparse.Namespace) -> list[str]:
+    """Rebuild `serve` argv for the child process (never includes --watch)."""
+    nb = Path(args.notebook).expanduser() if args.notebook else None
+    roots = [Path(r).expanduser() for r in (args.roots or [])]
+
+    child: list[str] = [
+        sys.executable,
+        "-m",
+        "llm_jupyter",
+        "serve",
+    ]
+    if nb is not None:
+        child.extend(["-n", str(nb)])
+    if roots:
+        child.append("--roots")
+        child.extend(str(r) for r in roots)
+    child.extend(["--default-mode", args.default_mode])
+    return child
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -34,6 +55,14 @@ def main(argv: list[str] | None = None) -> None:
         "--default-mode",
         choices=["explore", "record"],
         default=os.environ.get("LLM_JUPYTER_MODE", "explore"),
+    )
+    serve.add_argument(
+        "--watch",
+        action="store_true",
+        help=(
+            "Restart automatically when llm_jupyter package sources change (dev; "
+            "requires optional dependency watchfiles, e.g. pip install -e \".[dev]\")"
+        ),
     )
 
     exp = sub.add_parser(
@@ -131,6 +160,26 @@ def main(argv: list[str] | None = None) -> None:
 
     nb = Path(args.notebook).expanduser() if args.notebook else None
     roots = [Path(r).expanduser() for r in (args.roots or [])]
+
+    if args.watch:
+        try:
+            from watchfiles import run_process  # type: ignore[import-not-found]
+        except ImportError as e:
+            print(
+                "Serve --watch requires `watchfiles` (pip install watchfiles "
+                'or pip install -e ".[dev]").',
+                file=sys.stderr,
+            )
+            raise SystemExit(1) from e
+
+        pkg_dir = Path(__file__).resolve().parent
+        code = run_process(
+            pkg_dir,
+            target=subprocess.list2cmdline(_serve_child_argv(args)),
+            debounce=int(os.environ.get("LLM_JUPYTER_WATCH_DEBOUNCE_MS", "800")),
+            target_type="command",
+        )
+        raise SystemExit(code)
 
     mcp = build_mcp(nb, roots, args.default_mode)
     mcp.run(transport="stdio")

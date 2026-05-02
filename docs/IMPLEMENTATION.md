@@ -150,7 +150,7 @@ Exact fields will move; approximate shape:
 
 - **python_env_snapshot:** answers “why does my result differ?”—fill aggressively in **`record`**, lighter in **`explore`**.
 
-- **suggested_figure_prefix:** date + **`kernel_generation`** + short id of the **first cell executed in this `run`** (not always the notebook’s first code cell) so **`cell_id`**-only sweeps hint at the right artefacts.
+- **suggested_figure_prefix:** lowers naming friction; models still name plots sensibly.
 
 - **variable_preview_optional:** when requested—**values and behaviour**, not only dtypes (capped); see Variable previews section.
 
