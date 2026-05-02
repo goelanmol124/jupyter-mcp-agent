@@ -1,0 +1,18 @@
+{
+  "companion_version": 1,
+  "notebook": "agent_demo_poisson.ipynb",
+  "cells": [
+    {
+      "cell_id": "11111111-1111-4111-8111-111111119001",
+      "source": "# WHY one fixed seed: reproducible stdout for `.apynb` drift checks.\nimport numpy as np\nrng = np.random.default_rng(41)\n"
+    },
+    {
+      "cell_id": "11111111-1111-4111-8111-111111119002",
+      "source": "# WHY separate cell: isolation of sampling vs inference keeps partial runs readable.\nlam_true = 3.8\nn = 2500\ncounts = rng.poisson(lam_true, size=n)\n"
+    },
+    {
+      "cell_id": "11111111-1111-4111-8111-111111119003",
+      "source": "# WHY Wald SE sqrt(l_hat/n): large-n Poisson asymptotics (Variance \u2248 \u03bb for Poisson).\nlam_hat = float(counts.mean())\nse = float(np.sqrt(lam_hat / n))\nz = 1.96\nlo, hi = lam_hat - z * se, lam_hat + z * se\ncover = float(lo <= lam_true <= hi)\nprint(\"lam_hat\", lam_hat)\nprint(\"wald_ci\", lo, hi)\nprint(\"covers_truth_round\", cover)\n"
+    }
+  ]
+}

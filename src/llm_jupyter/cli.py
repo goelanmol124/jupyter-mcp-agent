@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 from llm_jupyter.server import build_mcp
@@ -87,15 +88,35 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if args.cmd == "manifest-tail":
-        from llm_jupyter.manifest import manifest_records_for_run, tail_manifest_records
+        from llm_jupyter.manifest import (
+            explain_manifest_miss_for_run_id,
+            manifest_records_for_run,
+            tail_manifest_records,
+        )
 
         mf_arg = Path(args.manifest).expanduser() if args.manifest else None
-        if args.run_id is not None and str(args.run_id).strip():
+        rid_arg = args.run_id
+        rid_stripped = str(rid_arg).strip() if rid_arg is not None else ""
+
+        if rid_arg is not None and rid_stripped != "":
             rows = manifest_records_for_run(
                 args.notebook,
-                str(args.run_id).strip(),
+                rid_stripped,
                 manifest_file=mf_arg,
             )
+            # WHY stderr hints for empty `--run-id` matches:
+            # Operators often cite a shortened/guessed ID; emitting `[]` alone is ambiguous
+            # (manifest missing vs wrong notebook filter vs typo). Humans need guidance without
+            # breaking JSON parsers that ingest stdout-only.
+            if not rows:
+                print(
+                    explain_manifest_miss_for_run_id(
+                        args.notebook,
+                        rid_stripped,
+                        manifest_file=mf_arg,
+                    ),
+                    file=sys.stderr,
+                )
         else:
             rows = tail_manifest_records(
                 args.notebook,

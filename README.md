@@ -4,7 +4,7 @@ Open-source **Python MCP** server for **`ipykernel`** notebooks: **`run`** (sing
 
 **Cursor:** always-on rule [.cursor/rules/research-notebook-mcp-agent.mdc](.cursor/rules/research-notebook-mcp-agent.mdc); workflow skill [.cursor/skills/research-notebook-mcp-workflow/SKILL.md](.cursor/skills/research-notebook-mcp-workflow/SKILL.md).
 
-Project-level MCP registration: **[`.cursor/mcp.json`](.cursor/mcp.json)** (targets [`demos/agent_scratch.ipynb`](demos/agent_scratch.ipynb)). **Reload Cursor** after changing MCP config so the `llm-jupyter` server appears; before reload, the assistant only has other MCP servers (for example the browser tools in this environment).
+Project-level MCP registration: **[`.cursor/mcp.json`](.cursor/mcp.json)** (targets [`demos/agent_scratch.ipynb`](demos/agent_scratch.ipynb); **`cwd`**: `${workspaceFolder}` so **`args -n demos/…`** resolves from the repo root). **Reload Cursor** after changing MCP config so the `llm-jupyter` server appears; before reload, the assistant only has other MCP servers (for example the browser tools in this environment).
 
 **Manual same-as-MCP calls** (stdio handlers, no IDE bridge):
 
@@ -13,7 +13,7 @@ python scripts/agent_mcp_selftest.py run run_all=true
 python scripts/agent_mcp_selftest.py notebook_validate
 python -m llm_jupyter export-apynb path/to/notebook.ipynb   # (re)write same-stem `.apynb`
 python -m llm_jupyter manifest-tail path/to/notebook.ipynb   # last manifest records for that notebook
-python -m llm_jupyter manifest-tail path/to/notebook.ipynb --run-id abcdef123456   # one cited run_id
+python -m llm_jupyter manifest-tail path/to/notebook.ipynb --run-id abcdef123456   # one cited run_id (stderr hint if no match)
 ```
 
 **Docs:** [PRD](docs/PRD.md) · [Implementation](docs/IMPLEMENTATION.md) · **License:** [MIT](LICENSE)
@@ -90,7 +90,14 @@ Committed demos under **`demos/`** (with `manifest.jsonl` gitignored there):
 | Notebook | Idea |
 |----------|------|
 | [`demos/agent_scratch.ipynb`](demos/agent_scratch.ipynb) | Monte Carlo π |
-| [`demos/agent_demo_euler.ipynb`](demos/agent_demo_euler.ipynb) | Euler step for `dy/dt = -y` vs `exp(-t)` |
+| [`demos/agent_demo_euler.ipynb`](demos/agent_demo_euler.ipynb) | Euler vs `exp(-t)` |
+| [`demos/agent_demo_buffer.ipynb`](demos/agent_demo_buffer.ipynb) | Rolling mean (`*.apynb` demo) |
+| [`demos/agent_demo_lognormal.ipynb`](demos/agent_demo_lognormal.ipynb) | Lognormal mean vs closed form |
+| [`demos/agent_demo_beta.ipynb`](demos/agent_demo_beta.ipynb) | Beta–Binomial posterior |
+| [`demos/agent_demo_markov.ipynb`](demos/agent_demo_markov.ipynb) | Two-state stationary distribution |
+| [`demos/agent_demo_ols.ipynb`](demos/agent_demo_ols.ipynb) | OLS recovery under Gaussian noise |
+| [`demos/agent_demo_softmax.ipynb`](demos/agent_demo_softmax.ipynb) | Softmax temperature vs entropy |
+| [`demos/agent_demo_poisson.ipynb`](demos/agent_demo_poisson.ipynb) | Poisson rate + Wald CI |
 
 **MCP-style manual calls** (same handlers as `python -m llm_jupyter serve`):
 

@@ -103,6 +103,8 @@ def main() -> None:
             "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_beta.ipynb run run_all=true\n"
             "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_markov.ipynb run run_all=true\n"
             "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_ols.ipynb run run_all=true\n"
+            "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_softmax.ipynb run run_all=true\n"
+            "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_poisson.ipynb run run_all=true\n"
             "  python -m llm_jupyter manifest-tail demos/notebook.ipynb --run-id RUN_ID_HERE\n"
             "  python -m llm_jupyter export-apynb demos/your.ipynb\n"
             "  python -m llm_jupyter manifest-tail demos/agent_demo_markov.ipynb --last 4\n"

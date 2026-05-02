@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from llm_jupyter.manifest import (
+    explain_manifest_miss_for_run_id,
     manifest_records_for_notebook,
     manifest_records_for_run,
     tail_manifest_records,
@@ -79,3 +80,42 @@ def test_manifest_records_for_run_specific_id(tmp_path: Path):
             f.write(json.dumps(obj) + "\n")
     got = manifest_records_for_run(nb, "aaa", manifest_file=mf)
     assert sorted(x["i"] for x in got) == [0, 2]  # run_id whitespace normalized
+
+
+def test_explain_manifest_miss_when_manifest_missing(tmp_path: Path):
+    # WHY assert prose not structure: wording is UX; substring checks tolerate minor edits.
+    nb = tmp_path / "solo.ipynb"
+    nb.write_text("{}", encoding="utf-8")
+    mf = tmp_path / "manifest.jsonl"
+    msg = explain_manifest_miss_for_run_id(nb, "abc", manifest_file=mf)
+    assert "missing" in msg.lower()
+
+
+def test_explain_manifest_miss_when_no_rows_for_nb(tmp_path: Path):
+    nb = tmp_path / "solo.ipynb"
+    nb.write_text("{}", encoding="utf-8")
+    other = tmp_path / "other.ipynb"
+    other.write_text("{}", encoding="utf-8")
+    mf = tmp_path / "manifest.jsonl"
+    with mf.open("w", encoding="utf-8") as f:
+        f.write(json.dumps({"notebook_path": str(other.expanduser().resolve()), "run_id": "zzz"}) + "\n")
+    msg = explain_manifest_miss_for_run_id(nb, "zzz", manifest_file=mf)
+    assert "no notebook_path matching" in msg
+
+
+def test_explain_manifest_miss_run_id_lists_recent_samples(tmp_path: Path):
+    nb = tmp_path / "solo.ipynb"
+    nb.write_text("{}", encoding="utf-8")
+    mf = tmp_path / "manifest.jsonl"
+    r = nb.expanduser().resolve()
+    ids: list[str] = []
+    with mf.open("w", encoding="utf-8") as f:
+        for i in range(4):
+            rid = f"run{i}"
+            ids.append(rid)
+            f.write(json.dumps({"notebook_path": str(r), "run_id": rid}) + "\n")
+    msg = explain_manifest_miss_for_run_id(nb, "nope", manifest_file=mf)
+    assert "not found" in msg
+    tail = ids[-min(12, len(ids)) :]
+    for rid in tail:
+        assert rid in msg

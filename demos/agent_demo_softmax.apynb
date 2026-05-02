@@ -1,0 +1,18 @@
+{
+  "companion_version": 1,
+  "notebook": "agent_demo_softmax.ipynb",
+  "cells": [
+    {
+      "cell_id": "11111111-1111-4111-8111-111111118001",
+      "source": "import numpy as np\n"
+    },
+    {
+      "cell_id": "11111111-1111-4111-8111-111111118002",
+      "source": "# WHY fixed logits: companion `.apynb` diffs stay stable versus random draws each run.\nlogits = np.array([2.3, -0.5, 0.9, -1.8, 0.2], dtype=float)\ntemperatures = np.array([0.25, 0.75, 1.0, 2.0, 8.0], dtype=float)\n"
+    },
+    {
+      "cell_id": "11111111-1111-4111-8111-111111118003",
+      "source": "def softmax(z: np.ndarray) -> np.ndarray:\n    # WHY subtract max(z): avoids exp overflow and keeps softmax numerically stable.\n    z = np.asarray(z, dtype=float)\n    e = np.exp(z - np.max(z))\n    return e / e.sum()\n\n\ndef categorical_entropy(p: np.ndarray) -> float:\n    p = np.asarray(p, dtype=float)\n    p = p[p > 1e-15]\n    return float(-np.sum(p * np.log(p)))\n\n\n# WHY loop (not broadcasting): readability in research cells beats micro-optimization here.\nfor T in temperatures:\n    p = softmax(logits / float(T))\n    print(f\"T={T:g} entropy={categorical_entropy(p):.5f} max_prob={float(p.max()):.5f}\")\n"
+    }
+  ]
+}

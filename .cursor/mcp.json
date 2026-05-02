@@ -1,6 +1,7 @@
 {
   "mcpServers": {
     "llm-jupyter": {
+      "type": "stdio",
       "command": "python",
       "args": [
         "-m",

@@ -76,3 +76,48 @@ def manifest_records_for_run(
         if rid is not None and str(rid).strip() == needle:
             out.append(row)
     return out
+
+
+def explain_manifest_miss_for_run_id(
+    notebook_path: str | Path,
+    run_id: str,
+    *,
+    manifest_file: Path | None = None,
+) -> str:
+    # WHY this helper exists (kept in library, not only CLI):
+    # - `manifest-tail --run-id` legitimately returns `[]` for several different reasons,
+    #   but JSON stdout cannot carry a prose explanation without breaking parsers.
+    # - Centralizing wording here lets pytest lock the UX and avoids duplicating branching
+    #   logic across future CLIs/tools.
+    # We strip run_id uniformly with manifest_records_for_run so the hint matches lookup rules.
+    nb = Path(notebook_path).expanduser().resolve()
+    needle = str(run_id).strip()
+    mf = manifest_file if manifest_file is not None else default_manifest_file_for_notebook(nb)
+
+    if not mf.is_file():
+        return (
+            f"llm-jupyter manifest-tail: manifest file missing at {mf}. "
+            f"Runs append manifest.jsonl beside the notebook; none recorded yet."
+        )
+
+    scoped = manifest_records_for_notebook(nb, manifest_file=mf)
+    if not scoped:
+        # WHY distinguish: avoids chasing a typo'ed run_id when the real issue is path/cwd mismatch.
+        return (
+            f"llm-jupyter manifest-tail: manifest exists ({mf}) but has no notebook_path matching "
+            f"{nb}. Confirm you passed this notebook path and cwd matches how runs were logged."
+        )
+
+    ids_tail = []
+    # WHY sample recent ids only: manifests can be long; surfacing dozens of IDs is unreadable noise.
+    for row in scoped[-min(12, len(scoped)) :]:
+        rid = row.get("run_id")
+        if rid is None:
+            continue
+        ids_tail.append(str(rid).strip())
+    sample = ", ".join(ids_tail) if ids_tail else "(no run_id fields on scoped rows)"
+
+    return (
+        f"llm-jupyter manifest-tail: run_id={needle!r} not found for this notebook ({len(scoped)} runs logged). "
+        f"Recent run_id samples: {sample}. Retry without --run-id (adjust --last) or paste the exact id."
+    )
