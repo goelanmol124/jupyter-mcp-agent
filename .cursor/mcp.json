@@ -10,7 +10,10 @@
         "-n",
         "demos/agent_scratch.ipynb"
       ],
-      "cwd": "${workspaceFolder}"
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      }
     }
   }
 }

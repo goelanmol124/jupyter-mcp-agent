@@ -2,11 +2,12 @@
 
 ### Changed
 
+- **`.cursor/mcp.json` (and README example):** Set **`env.PYTHONPATH`** to **`${workspaceFolder}/src`** so **`python -m llm_jupyter`** in Cursor loads the **workspace** package. Without this, a globally installed older **`llm-jupyter`** can shadow the repo and make MCP responses look “stuck” on old behavior.
+- **`notebook_outline`:** Response now includes **`notebook_filename`** and **`code_cell_indices`** near the top (after **`status`**) for faster planning and less dependence on long absolute paths.
 - **`run` response shape (agent ergonomics):** First key **`assistant_quick`** summarizes status, staleness hint, **`error_one_liner`**, and stream bulk in one skim object. **`execution_error`** appears immediately after **`status`**. **`companion`** is omitted when the sidecar gate was **`skipped`** (no same-stem **`.apynb`**), reducing repetitive noise. **`stream_summary`** and metadata stay above **`stdout_chunks`** / **`stderr_chunks`**; file stamp and **`python_env_snapshot`** remain near the tail.
 - **`.cursor/mcp.json`:** Default **`llm-jupyter`** args no longer include **`serve --watch`** (fewer transient MCP errors while Cursor holds a long-lived stdio session).
 - **`kernel_*` MCP tools:** pass **`notebook_path`** for the notebook whose kernel you mean (omit only when **`serve -n`** is that notebook); responses include **`notebook_path`** plus **`notebook_kernel_active`** (**`kernel_status`** only) until **`run`** or **`kernel_restart`** touches that notebook.
 - Documentation pass: README tool list + Cursor MCP snippet; PRD / IMPLEMENTATION aligned with shipped **`.apynb`** companions and CLI (`export-apynb`, `manifest-tail`).
-
 ### Added
 
 - **`run` response `stream_summary`:** character totals, stdout/stderr chunk counts, and trailing stream text (~1.5k chars each) surfaced at top level alongside **`stdout_chunks`**.

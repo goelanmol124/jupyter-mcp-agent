@@ -141,7 +141,9 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
     ) -> dict[str, object]:
         """List cells with index, type, code cell_id, and a short source preview—no kernel.
 
-        Use this before run(cell_id=...) instead of reading raw .ipynb JSON (large / easy to mis-copy).
+        **`notebook_filename`**, **`code_cell_count`**, and **`code_cell_indices`** summarize structure first;
+        **`notebook_path`** stays absolute for disambiguation. Use before **run**(cell_id=...) instead of
+        reading raw .ipynb JSON (large / easy to mis-copy).
         """
         nb_path = _notebook_arg(notebook_default, notebook_path)
         sess.check_allowed_notebook(nb_path)
@@ -158,6 +160,7 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
 
         rows: list[dict[str, object]] = []
         code_n = 0
+        code_indices: list[int] = []
         for i, cell in enumerate(nb.cells):
             ctype = str(cell.get("cell_type", ""))
             meta = cell.get("metadata") if isinstance(cell.get("metadata"), dict) else {}
@@ -175,13 +178,16 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
             rows.append(row)
             if ctype == "code":
                 code_n += 1
+                code_indices.append(i)
 
         return {
             "status": "ok",
+            "notebook_filename": nb_path.name,
+            "code_cell_count": code_n,
+            "code_cell_indices": code_indices,
             "notebook_path": str(nb_path.resolve()),
             "persist_cell_ids_used": bool(persist_cell_ids),
             "preview_chars_used": cap,
-            "code_cell_count": code_n,
             "cells": rows,
         }
 

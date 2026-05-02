@@ -6,7 +6,7 @@ Open-source **Python MCP** server for **`ipykernel`** notebooks — **one ipyker
 
 **Cursor:** [.cursor/rules/research-notebook-mcp-agent.mdc](.cursor/rules/research-notebook-mcp-agent.mdc) · skill [.cursor/skills/research-notebook-mcp-workflow/SKILL.md](.cursor/skills/research-notebook-mcp-workflow/SKILL.md)
 
-Default MCP wiring: **[`.cursor/mcp.json`](.cursor/mcp.json)** — **`"type": "stdio"`**, **`cwd": "${workspaceFolder}"`**, **`args`** include **`-n demos/agent_scratch.ipynb`**. Omit **`serve --watch`** here: it restarts the stdio server on source changes and can cause flaky MCP tool failures under Cursor. **Reload Cursor** after editing MCP config. For **`llm_jupyter` development**, install **`"[dev]"`** and run **`serve --watch`** in a terminal.
+Default MCP wiring: **[`.cursor/mcp.json`](.cursor/mcp.json)** — **`"type": "stdio"`**, **`cwd": "${workspaceFolder}"`**, **`env.PYTHONPATH`** points at **`src`** so Cursor loads this repo’s package even if an older **`llm-jupyter`** is installed globally. **`args`** include **`-n demos/agent_scratch.ipynb`**. Omit **`serve --watch`** here: it restarts the stdio server on source changes and can cause flaky MCP tool failures under Cursor. **Reload Cursor** after editing MCP config. For **`llm_jupyter` development**, install **`"[dev]"`** and run **`serve --watch`** in a terminal.
 
 **Manual calls** (same Python entrypoint as MCP; no IDE transport):
 
@@ -69,7 +69,10 @@ python -m llm_jupyter manifest-tail demos/agent_demo_markov.ipynb --last 8
       "type": "stdio",
       "command": "python",
       "args": ["-m", "llm_jupyter", "serve", "-n", "demos/agent_scratch.ipynb"],
-      "cwd": "${workspaceFolder}"
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      }
     }
   }
 }
@@ -79,10 +82,10 @@ python -m llm_jupyter manifest-tail demos/agent_demo_markov.ipynb --last 8
 
 | Tool | Purpose |
 |------|---------|
-| `run` | One execution mode (`cell_id` / `run_all` / `run_until_cell_id`); **`run_id`**, chunked streams, top-level **`stream_summary`** (tail + counts), **`execution_error`** (**`ename`**, **`evalue`**) when a cell fails, previews, stamps; same-stem **`.apynb`** checked when present |
+| `run` | One execution mode (`cell_id` / `run_all` / `run_until_cell_id`); top **`assistant_quick`** skim, **`run_id`**, chunked streams, **`stream_summary`**, **`execution_error`** when a cell fails, previews, stamps; same-stem **`.apynb`** checked when present (field omitted when gate **skipped**) |
 | `kernel_restart` / `kernel_interrupt` / `kernel_status` | **Per-notebook** ipykernel: pass **`notebook_path`** (omit only when it matches **`serve`** **`-n`** default); responses include **`notebook_path`** |
 | `clear_outputs` | Strip persisted outputs; optional **`clear_execution_counts`** |
-| `notebook_outline` | Read-only notebook map: **`index`**, **`cell_type`**, code **`cell_id`**, **`source_preview`** — use before **`run(cell_id=...)`** |
+| `notebook_outline` | Read-only map: **`notebook_filename`**, **`code_cell_indices`**, **`index`**, **`cell_type`**, code **`cell_id`**, **`source_preview`** — use before **`run(cell_id=...)`** |
 | `notebook_validate` | `nbformat` structural check |
 | `companion_validate` | **`.apynb`** ↔ **`.ipynb`** before kernel work |
 

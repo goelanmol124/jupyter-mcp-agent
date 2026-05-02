@@ -13,7 +13,7 @@ disable-model-invocation: true
 ## Current MCP server (repo `llm_jupyter`): what exists today
 
 - Tools are **`run`**, **`notebook_outline`**, **`kernel_*`**, **`clear_outputs`**, **`notebook_validate`**, **`companion_validate`**. Optional **`.apynb`** sidecar (same stem as the `.ipynb`): when that file exists, **`run`** cross-checks code-cell sources and `metadata.cell_id` before executing; use **`companion_strict=true`** to require a sidecar. **`variable_preview`** and **`cells_apply`** are **design targets**—do not assume they exist unless your install added them.
-- With the repo’s **project-level MCP file** `.cursor/mcp.json` (see README): **reload Cursor** so `llm-jupyter` registers; otherwise run `python scripts/agent_mcp_selftest.py …` from the repo root to hit the same code path.
+- With the repo’s **project-level MCP file** `.cursor/mcp.json` (see README): **`env.PYTHONPATH`** favors **`src`** so MCP runs this repo’s code, not an older globally installed **`llm-jupyter`**. **Reload Cursor** after changing MCP config; otherwise run `python scripts/agent_mcp_selftest.py …` from the repo root to hit the same code path.
 - **Path semantics:** **`notebook_path`** resolves vs the server **`cwd`**; omit for the **`serve -n`** default when calling **`run`** or **`kernel_*`**. For sidecars: **`export-apynb` → `companion_validate` → `run`**.
 - **Multi-notebook:** Cursor shares one MCP process across chats; **`notebook_path`** selects a **distinct ipykernel**. Pass **`notebook_path`** on **`kernel_restart`**, **`kernel_interrupt`**, and **`kernel_status`** for any notebook that is not the **`serve -n`** default.
 - **`run`** requires **exactly one** intent: **`cell_id`**, **`run_all=true`**, or **`run_until_cell_id`**. Passing more than one is an error (avoids silent “`cell_id` wins” bugs).
@@ -39,6 +39,7 @@ disable-model-invocation: true
 
 ## MCP usage habits
 
+- **`notebook_outline`** leads with **`notebook_filename`** and **`code_cell_indices`** (then the **`cells`** list); use those before parsing every row when you only need topology.
 - Prefer editing in Cursor’s notebook UI; optional **`.apynb`** JSON (`companion_version`, `cells` with `cell_id` + `source` per **code cell in order**) is for agents and scripts—keep it in sync with the notebook or validation fails before **`run`**. **`companion_validate`** checks drift without executing. Refresh the sidecar after UI-only edits: **`python -m llm_jupyter export-apynb path/to/analysis.ipynb`**.
 - Prefer **`run_all`** or **`run_until`** when reproducibility of the chain matters; note **`explore`** vs **`record`** when conclusions or shared figures matter.
 - Name plot files using **server hints** (`suggested_figure_prefix` / `LLM_NB_ART_PREFIX`) so runs stay traceable in logs.
