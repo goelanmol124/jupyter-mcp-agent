@@ -130,4 +130,6 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         except Exception as e:
             return {"status": "error", "tool_error": str(e), "traceback": traceback.format_exc()}
 
+    # Let local tooling (e.g. scripts/agent_mcp_selftest.py) shut down kernels cleanly between calls.
+    mcp._llm_kernel_session = sess  # noqa: SLF001
     return mcp

@@ -35,7 +35,12 @@ async def invoke_tool(tool: str, args: dict[str, object], nb: Path):
 
     mcp = build_mcp(nb, [], "explore")
     tm = mcp._tool_manager
-    return await tm.call_tool(tool, args, context=None, convert_result=False)
+    try:
+        return await tm.call_tool(tool, args, context=None, convert_result=False)
+    finally:
+        ks = getattr(mcp, "_llm_kernel_session", None)
+        if ks is not None:
+            ks.close()
 
 
 async def async_main(
@@ -87,7 +92,18 @@ async def async_main(
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Call llm-jupyter MCP-style tools from the repo.")
+    p = argparse.ArgumentParser(
+        description="Call llm-jupyter MCP-style tools from the repo.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_euler.ipynb --list-cell-ids\n"
+            "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_buffer.ipynb companion_validate\n"
+            "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_lognormal.ipynb run run_all=true\n"
+            "  python scripts/agent_mcp_selftest.py -n demos/agent_scratch.ipynb --companion-strict run run_all=true\n"
+            "    ^ fails when same-stem .apynb is missing.\n"
+        ),
+    )
     p.add_argument(
         "--notebook",
         "-n",

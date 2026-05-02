@@ -1,0 +1,18 @@
+{
+  "companion_version": 1,
+  "notebook": "agent_demo_lognormal.ipynb",
+  "cells": [
+    {
+      "cell_id": "11111111-1111-4111-8111-111111112001",
+      "source": "import numpy as np\nrng = np.random.default_rng(7)\nmu, sigma = 0.3, 0.35\n"
+    },
+    {
+      "cell_id": "11111111-1111-4111-8111-111111112002",
+      "source": "n = 500_000\nx = rng.lognormal(mean=mu, sigma=sigma, size=n)\n"
+    },
+    {
+      "cell_id": "11111111-1111-4111-8111-111111112003",
+      "source": "expected = float(np.exp(mu + 0.5 * sigma**2))\nsample_mean = float(x.mean())\nrel_err = abs(sample_mean - expected) / expected\nprint('sample_mean', sample_mean)\nprint('expected_E_X', expected)\nprint('relative_error', rel_err)\n"
+    }
+  ]
+}
