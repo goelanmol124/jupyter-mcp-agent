@@ -26,6 +26,7 @@ from llm_jupyter.notebook import (
 from llm_jupyter.paths import allowed_roots_for_notebook, is_under_roots, normalize_allowed_path
 from llm_jupyter.previews import previews_from_cells
 from llm_jupyter.stamp import notebook_file_stamp
+from llm_jupyter._hot_reload_stamp import STAMP as _HR_STAMP
 
 
 class KernelSession:
@@ -120,6 +121,7 @@ class KernelSession:
             "kernel_alive": alive,
             "interrupted_flag": self.interrupted,
             "full_top_to_bottom_at_generation": self.full_top_to_bottom_at_generation,
+            "hot_reload_stamp": _HR_STAMP,
         }
 
     def _ensure_kernel(self, art_prefix: str | None) -> None:
@@ -441,13 +443,17 @@ class KernelSession:
                         stderr_acc.append(se)
                         preview_pairs.append((cell, idx))
                     except CellExecutionError as e:
-                        err_cell = e.cell
+                        # nbclient's CellExecutionError has traceback / ename / evalue — not `.cell`;
+                        # use the loop's notebook node.
+                        err_cell = cell
                         ecid = str(err_cell.get("metadata", {}).get("cell_id", ""))
                         error_cell_id = ecid or error_cell_id
                         if ecid and ecid not in cells_executed_ids:
                             cells_executed_ids.append(ecid)
                         executed_in_order.append(idx)
                         so, se = collect_streams(list(err_cell.outputs or []))
+                        if not se.strip():
+                            se = str(e)
                         stdout_acc.append(so)
                         stderr_acc.append(se)
                         preview_pairs.append((err_cell, idx))
