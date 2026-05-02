@@ -2,7 +2,7 @@
 
 Open-source **Python MCP** server for **`ipykernel`** notebooks — **one ipykernel per `notebook_path`** inside a shared MCP process (safe across Cursor chats), with **`run`**, **`kernel_*`**, **`server_info`** (smoke), truthful execution JSON, optional **`.apynb`**, **`manifest.jsonl`**.
 
-**Release:** v0.1.1 · **Python:** ≥ 3.10 · **License:** [MIT](LICENSE)
+**Release:** v0.1.2 · **Python:** ≥ 3.10 · **License:** [MIT](LICENSE)
 
 **Cursor:** [.cursor/rules/research-notebook-mcp-agent.mdc](.cursor/rules/research-notebook-mcp-agent.mdc) · skill [.cursor/skills/research-notebook-mcp-workflow/SKILL.md](.cursor/skills/research-notebook-mcp-workflow/SKILL.md)
 

@@ -78,21 +78,11 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         companion_path: str | None = None,
         companion_strict: bool = False,
     ) -> dict[str, object]:
-        """Execute cells (one mode). Includes run_id. Checks same-stem `.apynb` when present.
+        """Execute with exactly one of cell_id / run_all / run_until_cell_id (see MCP instructions).
 
-        **`assistant_quick`** at the top is a skim block (**`llm_jupyter_version`**, status, error one-liner, stale note,
-        stream size hint) ahead of previews and chunked streams.
-
-        On failed cells, top-level **`execution_error`** carries **`ename`** and **`evalue`** from the kernel
-        (often faster to read than **`stderr_chunks`** / ANSI tracebacks). **`companion`** is omitted
-        when validation was skipped because no sidecar exists (saves repetition).
-
-        Pre-notebook **`Exception`** surfaces (permissions, nbformat validation, ambiguous run selector) yield
-        **`status`: `error`** with **`tool`**, **`llm_jupyter_version`**, **`tool_error`**, **`traceback`**
-        (different from kernel **`execution_error`** on **`status`: `ok`/`error` runs).
-
-        Relative notebook_path resolves against the MCP server's cwd (set cwd in mcp.json).
-        """
+        Returns assistant_quick + stream payloads + run_id; checks same-stem .apynb when present.
+        Cell failure → execution_error; pre-run Python errors → status:error JSON (tool, version, traceback).
+        notebook_path is relative to the MCP process cwd."""
         try:
             return sess.run(
                 notebook_path=notebook_path,
@@ -191,12 +181,7 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         persist_cell_ids: bool = True,
         preview_chars: int = 200,
     ) -> dict[str, object]:
-        """List cells with index, type, code cell_id, and a short source preview—no kernel.
-
-        **`notebook_filename`**, **`code_cell_count`**, and **`code_cell_indices`** summarize structure first;
-        **`llm_jupyter_version`** identifies the running server code; **`notebook_path`** stays absolute for disambiguation.
-        Use before **run**(cell_id=...) instead of reading raw .ipynb JSON (large / easy to mis-copy).
-        """
+        """Map cells (index, type, code cell_id, preview) without a kernel. Includes version, filename, code_cell_indices."""
         try:
             nb_path = _notebook_arg(notebook_default, notebook_path)
             sess.check_allowed_notebook(nb_path)
@@ -266,10 +251,7 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
 
     @mcp.tool(name="server_info")
     def server_info() -> dict[str, object]:
-        """No-kernel MCP smoke check: version, tools_n, python path, cwd, serve -n default, tool_names list.
-
-        **tools_n** and **tool_names** come from FastMCP in this process. **cursor_mcp_registry_key_hint**
-        matches `.cursor/mcp.json`; use Cursor MCP settings/docs if agents cannot invoke tools at all."""
+        """No-kernel smoke: version, tools_n, tool_names, python path, cwd, serve default, registry key (see MCP instructions)."""
         nb_def = str(notebook_default.expanduser().resolve()) if notebook_default else None
         tool_names: list[str] = []
         tm = getattr(mcp, "_tool_manager", None)

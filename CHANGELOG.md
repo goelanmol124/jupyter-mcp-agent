@@ -1,32 +1,32 @@
+# Changelog
+
 ## Unreleased
 
-### Changed
 
-- **`.cursor/mcp.json` (and README example):** Set **`env.PYTHONPATH`** to **`${workspaceFolder}/src`** so **`python -m llm_jupyter`** in Cursor loads the **workspace** package. Without this, a globally installed older **`llm-jupyter`** can shadow the repo and make MCP responses look “stuck” on old behavior.
-- **`notebook_outline`:** Response now includes **`notebook_filename`** and **`code_cell_indices`** near the top (after **`status`**) for faster planning and less dependence on long absolute paths.
-- **`run` response shape (agent ergonomics):** First key **`assistant_quick`** summarizes status, staleness hint, **`error_one_liner`**, and stream bulk in one skim object. **`execution_error`** appears immediately after **`status`**. **`companion`** is omitted when the sidecar gate was **`skipped`** (no same-stem **`.apynb`**), reducing repetitive noise. **`stream_summary`** and metadata stay above **`stdout_chunks`** / **`stderr_chunks`**; file stamp and **`python_env_snapshot`** remain near the tail.
-- **`.cursor/mcp.json`:** Default **`llm-jupyter`** args no longer include **`serve --watch`** (fewer transient MCP errors while Cursor holds a long-lived stdio session).
-- **`kernel_*` MCP tools:** pass **`notebook_path`** for the notebook whose kernel you mean (omit only when **`serve -n`** is that notebook); responses include **`notebook_path`** plus **`notebook_kernel_active`** (**`kernel_status`** only) until **`run`** or **`kernel_restart`** touches that notebook.
-- Documentation pass: README tool list + Cursor MCP snippet; PRD / IMPLEMENTATION aligned with shipped **`.apynb`** companions and CLI (`export-apynb`, `manifest-tail`).
-- **Version echo on MCP payloads:** **`llm_jupyter_version`** is included in **`run.assistant_quick`**, **`kernel_*`** responses, and **`notebook_outline`** so agents can spot a stale global install or wrong venv before trusting tool shape.
-- **`status: error` MCP payloads:** **`run`**, **`notebook_outline`**, **`notebook_validate`**, **`clear_outputs`**, **`companion_validate`**, and **`kernel_*`** handler failures include **`llm_jupyter_version`**, **`tool`**, **`tool_error`**, and **`traceback`**. Success responses for **`clear_outputs`**, **`notebook_validate`**, and **`companion_validate`** also echo **`llm_jupyter_version`**.
+## [0.1.2] — 2026-05-03
+
+Agent-focused MCP ergonomics and multi-notebook kernel hygiene.
 
 ### Added
 
-- **`run` response `stream_summary`:** character totals, stdout/stderr chunk counts, and trailing stream text (~1.5k chars each) surfaced at top level alongside **`stdout_chunks`**.
-- **`run` payload `execution_error`:** **`ename`** and **`evalue`** from the kernel after **`CellExecutionError`** (read before **`stderr_chunks`** when triaging).
-- **`notebook_outline` MCP tool:** cell **`index`** / **`cell_id`** plus short **`source_preview`** without starting a kernel — reduces malformed **`cell_id`** and avoids agents ingesting huge notebook JSON (where **attention** often favors beginnings and endings over the middle).
-- **`server_info` MCP tool:** No kernel — returns **`llm_jupyter_version`**, **`tools_n`**, **`cursor_mcp_registry_key_hint`**, **`python_executable`**, **`cwd`**, resolved **`serve -n`** default path (when set), extra roots, **`default_mode`**, and **`tool_names`** (runtime tool register from FastMCP) for wiring checks before **`run`**.
-- **`Per-notebook ipykernels`**: Cursor shares one MCP process across chats/tools; kernels are keyed by resolved **`notebook_path`** so **`run`** on **`nb1.ipynb`** vs **`nb2.ipynb`** no longer bleeds variables. LRU cap via **`LLM_JUPYTER_MAX_NOTEBOOK_KERNELS`** (default **32**, **0** = uncapped).
+- **`notebook_outline`:** Structural map (indexes, **`code_cell_indices`**, code **`cell_id`**, previews) without starting a kernel.
+- **`server_info`:** No-kernel wiring check (`llm_jupyter_version`, **`tools_n`**, **`tool_names`**, **`python_executable`**, **`cursor_mcp_registry_key_hint`**, **`cwd`**, resolved **`serve -n`** default, roots, **`default_mode`**).
+- **`run` helpers:** **`stream_summary`** (stream tails + chunk/char totals), **`execution_error`** (**`ename`**, **`evalue`**) after failed cells, top **`assistant_quick`** skim (`llm_jupyter_version`, status, staleness, error/stream hints).
+- **Per-notebook kernels** in one MCP process; optional LRU cap **`LLM_JUPYTER_MAX_NOTEBOOK_KERNELS`**.
+- **`demos/agent_mcp_lab.ipynb`** for multi-chunk stdout exercises.
 
-### Added (demos)
+### Changed
 
-- **`demos/agent_mcp_lab.ipynb`** — exercises multi-chunk stdout for MCP/agent tooling checks.
+- **Payload layout:** actionable fields first (`execution_error` near **`status`**); **`companion`** omitted when gate **`skipped`**; stamps/env toward the tail.
+- **Unified tool failures:** Structured **`status: error`** with **`llm_jupyter_version`**, **`tool`**, **`tool_error`**, **`traceback`** for **`run`**, **`notebook_outline`**, **`notebook_validate`**, **`clear_outputs`**, **`companion_validate`**, and **`kernel_*`**.
+- **`llm_jupyter_version`** echoed on success paths where useful (`notebook_outline`, **`clear_outputs`**, **`notebook_validate`**, **`companion_validate`**, **`kernel_*`**, **`run.assistant_quick`**).
+- **`.cursor/mcp.json` example / README:** no default **`serve --watch`**; **`PYTHONPATH`** = **`${workspaceFolder}/src`** so workspace **`src`** wins over an older installed package.
+- **MCP docs:** **`research-notebook-mcp-agent`** rule + **`research-notebook-mcp-workflow`** skill (MCP visibility, **`server_info`** first-call habit, Cursor [MCP integrations](https://cursor.com/help/customization/mcp) link).
 
 ### Fixed
 
-- **`run` on cell errors:** **`CellExecutionError`** from **nbclient** does not expose `.cell`; the handler now uses the notebook node from the execution loop. Previously this raised **`AttributeError`**, cluttered **`stderr_chunks`** with llm-jupyter’s own traceback, and left **`cells_executed`** empty and **`error_cell_id`** unset.
-- **`suggested_figure_prefix`:** Prefix slug now derives from the **first cell executed in this `run`** (the first index of the selected sweep), not always the notebook’s **first code cell**.
+- **`run` on errors:** **`CellExecutionError`** handler uses loop notebook cell (nbclient lacks **`.cell`**); avoids agent-swallowing tracebacks and empty **`cells_executed`**.
+- **`suggested_figure_prefix`:** Slug derives from **first executed cell this run**, not always the notebook’s first code cell.
 
 ## [0.1.1] — publish polish
 
