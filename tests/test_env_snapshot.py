@@ -22,7 +22,8 @@ def _fake_distribution(name: str, version: str) -> SimpleNamespace:
 
 @pytest.fixture(autouse=True)
 def clear_snapshot_cache(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LLM_JUPYTER_RECORD_ENV_SNAPSHOT_CACHE_SEC", raising=False)
+    # Tests expect each record snapshot rebuild unless TTL is exercised explicitly — production default is 120s.
+    monkeypatch.setenv("LLM_JUPYTER_RECORD_ENV_SNAPSHOT_CACHE_SEC", "0")
     from llm_jupyter import env_snapshot
 
     env_snapshot.reset_python_env_snapshot_cache_for_tests()
@@ -95,6 +96,7 @@ def test_non_record_no_git_effort(mode: str) -> None:
     snap = python_env_snapshot(mode)
     assert snap["git_commit"] is None
     assert "python_version" in snap
+    assert snap.get("env_snapshot_policy_version") is not None
 
 
 def test_ttl_cache_avoids_second_distributions_scan(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -114,3 +116,7 @@ def test_ttl_cache_avoids_second_distributions_scan(monkeypatch: pytest.MonkeyPa
     b = python_env_snapshot("record")["packages_summary_or_hash"]
     assert a == b
     assert len(called) == 1
+    second = python_env_snapshot("record")
+    assert second["env_snapshot_cache_hit"] is True
+    assert second["env_snapshot_ttl_sec_configured"] == 999.0
+    assert second.get("env_snapshot_cache_age_mono_sec") is not None

@@ -4,6 +4,20 @@
 
 Working notes for implementation — not frozen requirements.
 
+### Snapshot — strengths already embodied in code
+
+Aligned with [PRD vision](PRD.md#why-this-exists-vision): inspectable behaviour (streams, previews, fingerprints), artefacts humans can open, and honest handling of failures and staleness—not only “final plots look fine”:
+
+- **Notebook-keyed kernel pool:** one MCP process → **OrderedDict** of handles by resolved **`.ipynb`** path; **LRU eviction** capped by **`LLM_JUPYTER_MAX_NOTEBOOK_KERNELS`**.
+- **Per-notebook serialization:** **`notebook_exclusive`** lock + **`LLM_JUPYTER_NOTEBOOK_LOCK_TIMEOUT_SEC`** (timed queue, infinite queue, or non-blocking busy) so parallel MCP clients do not corrupt one file.
+- **Agent honesty:** **`process_session_id`** and **`server_info.tool_names`**, **`stable_tool_error`** field order, **`assistant_quick`** + verbosity compaction, **`halt_on_error=false`** still surfacing **`status:error`** when cells fail.
+- **Stale narrative:** **`outputs_might_be_stale` / `stale_notes`** tied to partial runs and **`kernel_generation`** (including “full notebook at this generation” bookkeeping).
+- **Bounded evidence:** stream suffix / tail semantics, optional spill to **`.llm_jupyter/runs/{run_id}/`**, **`run_stream_read`** for paged UTF-8 bytes.
+- **`record` fingerprints:** whitelist-based env snapshot hashing + optional short TTL reuse ( **`LLM_JUPYTER_RECORD_ENV_SNAPSHOT_CACHE_SEC`** ); policy version bumps invalidate cache semantics.
+- **Disk vs RAM coaching:** **`NOTEBOOK_EDIT_PERSISTED_VS_KERNEL_HINT`** after structural saves; companion mirror stale hints after patches.
+
+Probe-style **excluding** cells from **`run_all` / `run_until`** (metadata flag) remains a **documentation / product backlog** item—the current selectors still include every **code** cell.
+
 
 
 ### Companion files and MCP descriptions

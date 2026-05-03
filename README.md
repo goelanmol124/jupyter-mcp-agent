@@ -1,10 +1,12 @@
 # LLM Jupyter
 
+Built for **research-style iteration**: the assistant gets clear runnable actions (`run`, edit cells, previews); humans keep **truth on disk** (`.ipynb`, plots, manifests) without mining chat—the shape described in **[PRD: vision](docs/PRD.md#why-this-exists-vision)**.
+
 Open-source **Python MCP** server for **`ipykernel`** notebooks: **`run`** (single cell, **`run_all`**, or **`run_until`**, with **`halt_on_error`**), **`explore`** vs **`record`** modes, execution JSON (notebook file stamp, Python env snapshot, stdout/stderr chunked the same way, small previews), append-only **`manifest.jsonl`**.
 
 **Cursor:** always-on rule [.cursor/rules/research-notebook-mcp-agent.mdc](.cursor/rules/research-notebook-mcp-agent.mdc); workflow skill [.cursor/skills/research-notebook-mcp-workflow/SKILL.md](.cursor/skills/research-notebook-mcp-workflow/SKILL.md).
 
-Project-level MCP registration: **[`.cursor/mcp.json`](.cursor/mcp.json)** (targets [`demos/agent_scratch.ipynb`](demos/agent_scratch.ipynb); **`cwd`**: `${workspaceFolder}` so **`args -n demos/…`** resolves from the repo root). **Reload Cursor** after changing MCP config so the `llm-jupyter` server appears; before reload, the assistant only has other MCP servers (for example the browser tools in this environment).
+Project-level MCP registration: **[`.cursor/mcp.json`](.cursor/mcp.json)** (targets [`demos/agent_scratch.ipynb`](demos/agent_scratch.ipynb); **`cwd`**: `${workspaceFolder}` so **`args -n demos/…`** resolves from the repo root). **Reload Cursor** after changing MCP config so the `llm-jupyter` server appears; before reload, the assistant only has other MCP servers (for example the browser tools in this environment). One MCP process may hold **separate kernels per `notebook_path`** (LRU pool; capped by **`LLM_JUPYTER_MAX_NOTEBOOK_KERNELS`**); overlapping tool calls targeting the **same** `.ipynb` are serialized.
 
 **Manual same-as-MCP calls** (stdio handlers, no IDE bridge):
 
@@ -49,6 +51,9 @@ python -m llm_jupyter manifest-tail demos/agent_demo_ols.ipynb --run-id YOUR_RUN
 | `LLM_JUPYTER_MODE` | `explore` or `record` |
 | `LLM_JUPYTER_ROOTS` | Extra allowed directories (`os.pathsep`-separated); default sandbox is the notebook’s parent only when `--notebook` is set |
 | `LLM_NB_ART_PREFIX` | Passed into the kernel environment so saved figures can reuse a searchable prefix |
+| `LLM_JUPYTER_MAX_NOTEBOOK_KERNELS` | Maximum pooled kernels keyed by notebook path in one MCP process (default `32`). |
+| `LLM_JUPYTER_NOTEBOOK_LOCK_TIMEOUT_SEC` | Wait for serialization on the same notebook: seconds, or empty/`inf` for indefinite queue; `≤0` for immediate busy. |
+| `LLM_JUPYTER_MCP_STREAM_CHAR_BUDGET` | Concatenated stdout+stderr chars before spill logic engages with `persist_stream_outputs=external_only`. |
 
 **Cursor MCP config example** (`mcp.json`):
 
@@ -74,10 +79,8 @@ Use an **absolute** path for `-n` on Windows unless `cwd` is the notebook folder
 | `kernel_restart` / `kernel_interrupt` / `kernel_status` | Kernel lifecycle (`kernel_generation` bumps on restart) |
 | `clear_outputs` | Clear persisted outputs (optional `clear_execution_counts`) |
 | `notebook_validate` | `nbformat` schema check without running |
-| `notebook_outline` | Structural map (indexes, `cell_id` for code/markdown/raw once assigned) |
-| `notebook_cells_patch` | Batch **insert** / **delete** / **move** / **set_source**; returns **`cells_summary`** |
-| `cells_apply` | Replace **code** cell `source` by `cell_id` |
-| `companion_validate` | Optional `.apynb` / YAML sidecar vs notebook sources |
+
+*Full tool surface for your build:* call MCP **`server_info`** and read **`tool_names`** (many more helpers: `notebook_cells_patch`, `cells_apply`, `companion_validate`, `variable_preview`, `dry_run`, `notebook_execution_plan`, `notebook_outline`, `run_stream_read`, `kernel_ping`, …).
 
 **Security:** With `--notebook` set, writes are limited to that notebook path and its parent (plus `--roots`). Starting without `-n` only anchors each tool call’s path to itself—use `-n` in real projects.
 
@@ -118,6 +121,6 @@ python scripts/demo_research_sin_inv.py
 python scripts/demo_polyfit_noise.py
 ```
 
-## Scope notes (v1)
+## Scope notes
 
-Companion YAML/JSON mirrors, **`cells_apply`**, **`notebook_cells_patch`**, and **`variable_preview`** are implemented on the MCP surface; see tools list in this README and [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md).
+Companion validation (`.apynb` / `.companion.yaml`), structural edits (**`notebook_cells_patch`**, **`cells_apply`**), **`variable_preview`**, plan/dry helpers, stream spill **`run_stream_read`**, and richer payloads are **in-tree** today—see MCP **`server_info`** → **`tool_names`** and [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) for design notes and backlog.

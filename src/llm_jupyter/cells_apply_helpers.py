@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypedDict
+
+
+class CellsApplyEditItem(TypedDict):
+    """One MCP ``cells_apply`` edit (**code cells** only via ``notebook_cells_patch``)."""
+
+    cell_id: str
+    source: str
 
 
 def normalize_edits(edits: Any) -> list[tuple[str, str]]:

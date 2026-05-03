@@ -1,9 +1,13 @@
 """KernelSession wiring helpers surfaced via ``server_info``."""
+
 from __future__ import annotations
+
+import asyncio
 
 import nbformat as nbfmt
 import nbformat.v4 as nbf
 
+from llm_jupyter.server import build_mcp
 from llm_jupyter.session import KernelSession, ansi_streams_strip_requested, assistant_quick_compact_requested
 
 
@@ -52,3 +56,38 @@ def test_notebook_kernel_pool_paths_starts_empty(tmp_path) -> None:
         assert sess.notebook_kernel_pool_paths_resolved() == []
     finally:
         sess.close()
+
+
+def test_kernel_field_hints_respect_verbosity_compact(monkeypatch, tmp_path) -> None:
+    nb_path = tmp_path / "n.ipynb"
+    nbfmt.write(nbf.new_notebook(cells=[]), open(nb_path, "w", encoding="utf-8"))
+
+    monkeypatch.delenv("LLM_JUPYTER_VERBOSITY_COMPACT", raising=False)
+    monkeypatch.delenv("LLM_JUPYTER_COMPACT_ASSISTANT_QUICK", raising=False)
+
+    sess = KernelSession(nb_path, [], "explore")
+    try:
+        assert "field_hints" in sess.kernel_ping()
+        monkeypatch.setenv("LLM_JUPYTER_VERBOSITY_COMPACT", "1")
+        assert "field_hints" not in sess.kernel_ping()
+    finally:
+        sess.close()
+
+
+def test_server_info_includes_process_session_id(tmp_path) -> None:
+    nb_path = tmp_path / "n.ipynb"
+    nbfmt.write(nbf.new_notebook(cells=[]), open(nb_path, "w", encoding="utf-8"))
+
+    async def _call() -> dict:
+        mcp = build_mcp(nb_path, [], "explore")
+        tm = mcp._tool_manager
+        try:
+            body = await tm.call_tool("server_info", {}, context=None, convert_result=False)
+        finally:
+            getattr(mcp, "_llm_kernel_session").close()
+        return dict(body)
+
+    body = asyncio.run(_call())
+    assert body.get("status") == "ok"
+    sess_id = body.get("process_session_id")
+    assert isinstance(sess_id, str) and len(sess_id) >= 8

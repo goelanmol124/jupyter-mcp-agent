@@ -56,6 +56,7 @@ def test_notebook_cells_patch_insert_and_delete(tmp_path: Path) -> None:
             ],
         )
         assert rep["status"] == "ok"
+        assert rep.get("notebook_edit_kernel_hint")
         nb1 = load_notebook(nb_path)
         assert len(nb1.cells) == 2
         assert nb1.cells[0].cell_type == "markdown"

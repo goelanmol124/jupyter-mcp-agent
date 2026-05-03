@@ -75,11 +75,13 @@ Expose clearly in MCP so the assistant does not improvise semantics:
 |-----------|---------|
 | **`run_all`** | All code cells **top → bottom**. |
 | **`run_until`** | From the top **through** a target **`cell_id`**, inclusive. Prefer ids over naked indices. |
-| **`halt_on_error`** | Stop at first failing cell versus continue—match familiar notebook UX. |
+| **`halt_on_error`** | Stop at first failing cell versus continue. If **false**, execution may proceed, but replies stay **honest**: **`status:error`**, **`execution_error`**, stderr/traceback payloads—never a silent “all OK”. |
 
 ## Scope
 
-**Out of scope for v1 design:** one MCP instance fanning multiple notebooks inside **the same chat** at once. Separate chats pointing at different notebooks with separate configs **is fine**.
+The server supports **kernels keyed by notebook path** within **one MCP process** (pooled; configurable cap). Prefer **one primary notebook per assistant thread** to keep context simple; juggling many paths in parallel is possible but ergonomically noisy. Separate Cursor chats pointing at **different MCP configs** remains a natural isolation pattern.
+
+**Evidence:** large runs may write stream snapshots under `{notebook_parent}/.llm_jupyter/runs/<run>/` beside the workbook so MCP JSON stays bounded; **`manifest.jsonl`** stays the append-only run ledger.
 
 ## Safety and experiments
 

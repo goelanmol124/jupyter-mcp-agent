@@ -10,9 +10,11 @@ def test_mcp_tool_surface_is_small():
     assert names == {
             "run",
             "dry_run",
+            "notebook_execution_plan",
             "kernel_restart",
             "kernel_interrupt",
             "kernel_status",
+            "kernel_ping",
             "clear_outputs",
             "notebook_validate",
             "notebook_outline",
@@ -20,6 +22,7 @@ def test_mcp_tool_surface_is_small():
             "companion_validate",
             "cells_apply",
             "variable_preview",
+            "run_stream_read",
             "server_info",
         }
     for t in tools:

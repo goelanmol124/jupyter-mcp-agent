@@ -93,6 +93,18 @@ def append_kernel_traceback_stderr(stderr_so_far: str, traceback_text: str) -> s
     return stderr_so_far + sep + tb
 
 
+STREAM_SUFFIX_DESCRIPTOR: dict[str, Any] = {
+    "strategy": "literal_suffix_chars",
+    "from_end": True,
+    "note": (
+        "stdout_tail/stderr_tail and *_suffix mirror the **last N characters** of captured stream text, "
+        "not POSIX “tail -n lines”. Mid-string fragments may look “corrupted” when N truncates earlier context."
+    ),
+    "summary_suffix_n_chars": STREAM_SUMMARY_TAIL_CHARS,
+    "per_cell_suffix_n_chars": CELL_STREAM_TAIL_CHARS,
+}
+
+
 def cell_stream_row(
     *,
     cell_id: str,
@@ -108,6 +120,9 @@ def cell_stream_row(
         "cell_index": cell_index,
         "stdout_chars": len(stdout_full),
         "stderr_chars": len(stderr_full),
+        # Explicit suffix semantics (duplicate keys for readability with stream_truncation_semantics).
+        "stdout_suffix": uc,
+        "stderr_suffix": ec,
         "stdout_tail": uc,
         "stderr_tail": ec,
     }
@@ -134,11 +149,15 @@ def stream_summary_for_tool(
 ) -> dict[str, Any]:
     """Compact stream metadata plus trailing text for MCP / agent consumers."""
 
+    suf_out = stdout_full[-tail_chars:] if stdout_full else ""
+    suf_err = stderr_full[-tail_chars:] if stderr_full else ""
     return {
         "stdout_chars": len(stdout_full),
         "stderr_chars": len(stderr_full),
         "stdout_chunk_count": len(stdout_chunks),
         "stderr_chunk_count": len(stderr_chunks),
-        "stdout_tail": stdout_full[-tail_chars:] if stdout_full else "",
-        "stderr_tail": stderr_full[-tail_chars:] if stderr_full else "",
+        "stdout_suffix": suf_out,
+        "stderr_suffix": suf_err,
+        "stdout_tail": suf_out,
+        "stderr_tail": suf_err,
     }

@@ -20,7 +20,7 @@ def test_run_all_writes_output_and_manifest(tmp_path: Path):
     try:
         out = sess.run(run_all=True, mode="explore")
         assert out["status"] == "ok"
-        assert "run_id" in out and len(out["run_id"]) >= 8
+        assert list(out.keys())[:3] == ["status", "run_id", "mode"]
         assert out["kernel_generation"] >= 1
         assert not out["outputs_might_be_stale"]
         assert "out" in "".join(out["stdout_chunks"].values())
@@ -111,6 +111,7 @@ def test_halt_on_false_still_reports_structured_execution_error(tmp_path: Path):
         timings = out.get("phase_timings_ms") or {}
         assert timings.get("kernel_shell_setup_ms", 0) >= 0
         assert timings.get("payload_assembly_ms", 0) >= 0
+        assert "manifest_append_wall_ms" in timings
     finally:
         sess.close()
 
@@ -132,6 +133,8 @@ def test_variable_preview_sees_kernel_state(tmp_path: Path):
         assert out["status"] == "ok"
         assert "714" in out["previews"]["demo_x"]
         assert "cold_kernel_hint" not in out
+        assert "preview_diagnostic" not in out
+        assert out.get("kernel_alive") is True
     finally:
         sess.close()
 
@@ -148,7 +151,9 @@ def test_variable_preview_cold_hint_when_all_undefined(tmp_path: Path):
     try:
         out = sess.variable_preview(names=["absent_z"])
         assert out["status"] == "ok"
-        assert "cold_kernel_hint" in out
+        assert "preview_diagnostic" in out
+        assert "cold_kernel_hint" not in out
+        assert out["kernel_alive"] is True
     finally:
         sess.close()
 
@@ -166,7 +171,8 @@ def test_variable_preview_cold_kernel_marks_missing(tmp_path: Path):
         out = sess.variable_preview(names=["absent_name"])
         assert out["status"] == "ok"
         assert out["previews"]["absent_name"] == "<not defined>"
-        assert "cold_kernel_hint" in out
+        assert "preview_diagnostic" in out
+        assert "cold_kernel_hint" not in out
     finally:
         sess.close()
 

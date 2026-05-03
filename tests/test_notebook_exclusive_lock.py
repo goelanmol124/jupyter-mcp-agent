@@ -33,6 +33,9 @@ def test_notebook_exclusive_nonblocking_raises_when_busy(tmp_path, monkeypatch: 
                     pass
             except NotebookConcurrentBusy as e:
                 caught.append(e)
+                assert isinstance(e.exclusive_notebook_resolved, str)
+                assert e.contention_kind == "nonblocking_busy"
+                assert e.lock_mode == "nonblocking"
 
         t1 = threading.Thread(target=holder)
         t2 = threading.Thread(target=contender)

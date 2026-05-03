@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.2.6] — 2026-05-03
+
+### Added
+
+- **`process_session_id`** on **`server_info`** (UUID for the MCP Python process lifecycle).
+- **`kernel_ping`** and **`notebook_execution_plan`** MCP tools (**structural probe** without **`dry_run`**’s mandatory selector); **`run_stream_read`** pulls capped base64 slices from **`.llm_jupyter/runs/<run_id>/`** spill artifacts after oversized streams.
+- **`run(..., persist_stream_outputs, omit_stream_chunks)`** MCP args; **`LLM_JUPYTER_VERBOSITY_COMPACT`** (and shared tier with **`LLM_JUPYTER_COMPACT_ASSISTANT_QUICK`**) trims **`assistant_quick`** / hides **`kernel_*`** **`field_hints`**.
+- **`variable_preview`**:**`names_strict`**, **`names_omitted_invalid`**, **`names_truncated_after_pool_cap`** audit fields.
+- **`notebook_outline`**: **`outline_caps_requested`** vs **`outline_caps_effective`** (floors rationale).
+- **`CellsApplyEditItem`** TypedDict (**`cells_apply`** schema fidelity); MCP errors via **`stable_tool_error`** envelopes; **`companion_validate`** errors merge notebook **resolution_meta** when the path was resolved.
+
+### Changed
+
+- **`.gitignore`**: `.llm_jupyter/` notebook-adjacent evidence tree ignored by default.
+
+---
+
+## [0.2.5] — 2026-05-03
+
+### Breaking
+
+- MCP **`companion_validate`**: **flattened** response— **`status`** is top-level (**`ok`**, **`skipped`**, **`error`**); **`report`** wrapper removed. Fields from validation are siblings of **`llm_jupyter_version`**.
+
+### Added
+
+- **`resolved_notebook_path`** + **`used_default_notebook`** on MCP tools that infer **`-n`**, plus **`variable_preview`** / **`dry_run`** / **`run`** / kernel / patch payloads.
+- **`variable_preview`**: **`preview_diagnostic`** when all names are **`<not defined>`**; **`kernel_alive`** with **`kernel_generation`**; removed misleading **`cold_kernel_hint`**-only narrative.
+- **`kernel_*`**: **`field_hints`** on success payloads clarifying **`kernel_alive`** vs **`notebook_kernel_active`**.
+- **`notebook_outline`**: **`outline_sources_truncation_summary`** when **`include_sources`**.
+- **`phase_timings_ms.manifest_append_wall_ms`**; manifest rows may include **`python_env_snapshot_meta`** (record TTL cache metadata).
+- **`python_env_snapshot`** (record): **`env_snapshot_cache_hit`**, **`env_snapshot_ttl_sec_configured`**, **`env_snapshot_cache_age_mono_sec`**, **`env_snapshot_policy_version`**; explore adds policy version only.
+- **`NotebookConcurrentBusy`** structured fields surfaced in **`notebook_exclusive_*`** MCP error keys.
+- **`companion_messaging`** module for unified companion / disk-vs-kernel copy; **`notebook_edit_kernel_hint`** after **`notebook_cells_patch`**.
+
+### Changed
+
+- **`run`** / **`dry_run`** JSON key order: **`status`**, **`run_id`**, **`mode`**, resolution fields, then **`assistant_quick`**.
+- **`server_info.tools_n_deprecation_hint`**: **`tool_names`** is authoritative.
+- MCP **`instructions`** + research skill: heavy **`run`**, record cache, **`manifest-tail`**, timing boundaries.
+
+### Documentation
+
+- **`git_commit`**: env snapshot notes **`rev-parse`** cwd caveats; SKILL latency section updated.
+
+---
+
 ## [0.2.4] — 2026-05-03
 
 ### Added

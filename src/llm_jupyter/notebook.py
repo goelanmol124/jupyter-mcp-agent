@@ -18,6 +18,20 @@ def save_notebook(nb: nbformat.NotebookNode, path: str | Any) -> None:
         nbformat.write(nb, f)
 
 
+def strip_cell_outputs_matching_type(nb: nbformat.NotebookNode, cell_indices: list[int], *, output_type: str) -> None:
+    """Remove outputs with ``output_type`` (e.g. ``stream``) from selected cells; keep errors/other MIME."""
+
+    ot = output_type.strip()
+    for idx in cell_indices:
+        if idx < 0 or idx >= len(nb.cells):
+            continue
+        cell = nb.cells[idx]
+        outs = list(getattr(cell, "outputs", []) or [])
+        cell.outputs = [
+            o for o in outs if isinstance(o, dict) and str(o.get("output_type", "")).strip() != ot
+        ]
+
+
 def ensure_cell_ids(nb: nbformat.NotebookNode, persist_path: str | Any | None = None) -> bool:
     """Assign metadata.cell_id to every cell (code, markdown, raw); return True if modified."""
     changed = False

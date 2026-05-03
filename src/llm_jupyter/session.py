@@ -17,8 +17,16 @@ from jupyter_client import KernelManager
 from nbclient import NotebookClient
 from nbclient.exceptions import CellExecutionError
 
+from llm_jupyter.companion_messaging import (
+    COMPANION_MIRROR_STALE_HINT,
+    COMPANION_SKIPPED_NOTE,
+    COMPANION_STRICT_MISSING,
+    NOTEBOOK_EDIT_PERSISTED_VS_KERNEL_HINT,
+)
+from llm_jupyter.env_snapshot import env_snapshot_ttl_meta_from_snapshot, python_env_snapshot
 from llm_jupyter.chunks import (
     MAX_KERNEL_ERROR_LOG_ENTRIES,
+    STREAM_SUFFIX_DESCRIPTOR,
     append_kernel_traceback_stderr,
     cell_stream_row,
     chunk_text,
@@ -34,7 +42,6 @@ from llm_jupyter.companion import (
     default_companion_path_for_notebook,
     validate_companion_file,
 )
-from llm_jupyter.env_snapshot import python_env_snapshot
 from llm_jupyter.manifest import append_manifest
 from llm_jupyter.notebook_cells_patch import (
     apply_notebook_cells_patch,
@@ -49,25 +56,77 @@ from llm_jupyter.notebook import (
     load_notebook,
     load_notebook_ensuring_cell_ids,
     save_notebook,
+    strip_cell_outputs_matching_type,
     validate_notebook_node,
 )
 
 from llm_jupyter.paths import allowed_roots_for_notebook, is_under_roots, normalize_allowed_path
 from llm_jupyter.previews import previews_from_cells
 from llm_jupyter.stamp import notebook_file_stamp
+from llm_jupyter.stream_artifacts import (
+    mcp_stream_char_budget,
+    read_run_stream_slice,
+    run_stream_read_max_bytes,
+    write_run_stream_artifacts,
+)
 
 _NOTEBOOK_EXCLUSIVE_LOCK_ENV = "LLM_JUPYTER_NOTEBOOK_LOCK_TIMEOUT_SEC"
 _COMPACT_ASSISTANT_QUICK_ENV = "LLM_JUPYTER_COMPACT_ASSISTANT_QUICK"
 _STRIP_ANSI_STREAMS_ENV = "LLM_JUPYTER_STRIP_ANSI_STREAMS"
+_VERBOSITY_COMPACT_ENV = "LLM_JUPYTER_VERBOSITY_COMPACT"
+
+
+def _verbosity_compact() -> bool:
+    """Omit lengthy ``assistant_quick`` prose and MCP ``field_hints`` on kernel tools."""
+
+    raw = os.environ.get(_VERBOSITY_COMPACT_ENV, "").strip().lower()
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    cq = os.environ.get(_COMPACT_ASSISTANT_QUICK_ENV, "").strip().lower()
+    return cq in ("1", "true", "yes", "on")
+
+
+def _omit_stream_chunks_requested(omit_stream_chunks: bool | None) -> bool:
+    if omit_stream_chunks is not None:
+        return bool(omit_stream_chunks)
+    raw = os.environ.get("LLM_JUPYTER_OMIT_STREAM_CHUNK_MAP", "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
 
 
 class NotebookConcurrentBusy(RuntimeError):
     """Exclusive access to one ``.ipynb`` is unavailable (another tool call holds the notebook lock).
 
-
     MCP clients sometimes issue parallel requests; llm-jupyter serializes notebook-scoped work per path.
     Set ``LLM_JUPYTER_NOTEBOOK_LOCK_TIMEOUT_SEC`` to empty or ``inf`` to queue indefinitely instead of timing out.
+
+    Structured fields propagate to MCP tool ``status:error`` payloads via ``_notebook_exclusive_busy``.
     """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        exclusive_notebook_resolved: str | None = None,
+        lock_mode: str | None = None,
+        timed_wait_seconds: float | None = None,
+        contention_kind: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.exclusive_notebook_resolved = exclusive_notebook_resolved
+        self.lock_mode = lock_mode
+        self.timed_wait_seconds = timed_wait_seconds
+        self.contention_kind = contention_kind
+
+
+KERNEL_TOOL_FIELD_HINTS: dict[str, str] = {
+    "kernel_alive": "ipykernel subprocess is running (False if exited or never started on this pooled handle slot).",
+    "notebook_kernel_active": (
+        "True when llm-jupyter holds a pooled kernel session slot for this notebook path "
+        "(a NotebookKernelHandle); the subprocess may still be dead until restarted—see kernel_alive."
+    ),
+    "kernel_generation": "Monotonic bump on kernel (re)start for this notebook in this MCP process.",
+    "interrupted_flag": "True after kernel_interrupt succeeded for this handle until the next restart.",
+}
 
 
 def notebook_exclusive_lock_timeout_seconds() -> float | None:
@@ -88,7 +147,7 @@ def notebook_exclusive_lock_timeout_seconds() -> float | None:
 def assistant_quick_compact_requested(explicit_compact: bool) -> bool:
     """Slim ``assistant_quick`` in ``run`` when tool arg or env enables it."""
 
-    if explicit_compact:
+    if explicit_compact or _verbosity_compact():
         return True
     raw = os.environ.get(_COMPACT_ASSISTANT_QUICK_ENV, "").strip().lower()
     return raw in ("1", "true", "yes", "on")
@@ -279,6 +338,7 @@ class KernelSession:
         self._handles: OrderedDict[Path, NotebookKernelHandle] = OrderedDict()
         self._notebook_exclusive_locks: dict[Path, threading.Lock] = {}
         self._notebook_exclusive_registry_lock = threading.Lock()
+        self._mru_notebook_path: Path | None = None
 
     def _canonical(self, notebook_path: Path) -> Path:
         return notebook_path.expanduser().resolve()
@@ -313,7 +373,11 @@ class KernelSession:
                 raise NotebookConcurrentBusy(
                     f"Notebook-exclusive lock busy for {canon}: another llm-jupyter tool is "
                     f"already running against this path. Serialize MCP calls for the same .ipynb, "
-                    f"or set {_NOTEBOOK_EXCLUSIVE_LOCK_ENV} empty/inf for a blocking queue."
+                    f"or set {_NOTEBOOK_EXCLUSIVE_LOCK_ENV} empty/inf for a blocking queue.",
+                    exclusive_notebook_resolved=str(canon),
+                    lock_mode="nonblocking",
+                    timed_wait_seconds=None,
+                    contention_kind="nonblocking_busy",
                 )
         else:
             if not lk.acquire(timeout=timeout_sec):
@@ -321,7 +385,11 @@ class KernelSession:
                 raise NotebookConcurrentBusy(
                     f"Notebook-exclusive lock not acquired within {waited}s for {canon}. "
                     f"Likely concurrent MCP workload for one .ipynb. Wait and retry or raise "
-                    f"{_NOTEBOOK_EXCLUSIVE_LOCK_ENV} if you intend to block longer."
+                    f"{_NOTEBOOK_EXCLUSIVE_LOCK_ENV} if you intend to block longer.",
+                    exclusive_notebook_resolved=str(canon),
+                    lock_mode="timed",
+                    timed_wait_seconds=float(waited),
+                    contention_kind="timeout",
                 )
         try:
             yield
@@ -347,6 +415,19 @@ class KernelSession:
         for h in self._handles.values():
             h.dispose_nb_client_shell()
 
+    def _used_default_notebook_arg(self, notebook_path_arg: str | None) -> bool:
+        return self.default_notebook is not None and (
+            notebook_path_arg is None or not str(notebook_path_arg).strip()
+        )
+
+    def notebook_resolution_meta(self, notebook_path_arg: str | None, resolved: Path) -> dict[str, str | bool]:
+        s = str(self._canonical(resolved))
+        return {
+            "notebook_path": s,
+            "resolved_notebook_path": s,
+            "used_default_notebook": self._used_default_notebook_arg(notebook_path_arg),
+        }
+
     def _get_handle(self, notebook_resolved_path: Path) -> NotebookKernelHandle:
         cand = notebook_resolved_path.expanduser().resolve()
 
@@ -364,46 +445,92 @@ class KernelSession:
         self._handles[cand] = h
         return h
 
+    def _touch_mru(self, path: Path) -> None:
+        self._mru_notebook_path = path.expanduser().resolve()
+
+    def _kernel_tools_resolve(self, notebook_path: str | None) -> tuple[Path, str]:
+        """Return resolved ``.ipynb`` and how the path was inferred (explicit, MRU, or serve `-n`)."""
+
+        if notebook_path and str(notebook_path).strip():
+            path = normalize_allowed_path(notebook_path)
+            self.check_allowed_notebook(path)
+            resolved = path.resolve()
+            self._touch_mru(resolved)
+            return resolved, "explicit_notebook_path"
+        if self._mru_notebook_path is not None:
+            mr = self._canonical(self._mru_notebook_path)
+            if mr.exists():
+                try:
+                    self.check_allowed_notebook(mr)
+                    self._touch_mru(mr)
+                    return mr, "last_notebook_tool_target_mru"
+                except PermissionError:
+                    pass
+        if self.default_notebook:
+            path = normalize_allowed_path(str(self.default_notebook))
+            self.check_allowed_notebook(path)
+            resolved = path.resolve()
+            self._touch_mru(resolved)
+            return resolved, "serve_default_notebook"
+        raise ValueError(
+            "notebook_path is required for kernel_restart / kernel_interrupt / kernel_status "
+            "unless serve was started with --notebook / -n, or MRU applies after another notebook-scoped tool.",
+        )
+
     def _kernel_tools_path_arg(self, notebook_path: str | None) -> Path:
-        nb_path_arg = notebook_path or (str(self.default_notebook) if self.default_notebook else "")
-        if not str(nb_path_arg).strip():
-            raise ValueError(
-                "notebook_path is required for kernel_restart / kernel_interrupt / kernel_status "
-                "unless the MCP server was started with --notebook / -n "
-                "(one default notebook implied).",
-            )
-        path = normalize_allowed_path(nb_path_arg)
-        self.check_allowed_notebook(path)
-        return path.resolve()
+        return self._kernel_tools_resolve(notebook_path)[0]
+
+    def kernel_field_hints_fragment(self) -> dict[str, Any]:
+        if _verbosity_compact():
+            return {}
+        return {"field_hints": dict(KERNEL_TOOL_FIELD_HINTS)}
 
     def kernel_restart(self, notebook_path: str | None = None, art_prefix: str | None = None) -> dict[str, Any]:
-        path = self._kernel_tools_path_arg(notebook_path)
+        path, basis = self._kernel_tools_resolve(notebook_path)
         out = dict(self._get_handle(path).kernel_restart(art_prefix=art_prefix))
         out["notebook_path"] = str(path)
-        return {**_server_tool_digest(), **out}
+        return {
+            **_server_tool_digest(),
+            **self.notebook_resolution_meta(notebook_path, path),
+            "notebook_path_resolution_basis": basis,
+            **self.kernel_field_hints_fragment(),
+            **out,
+        }
 
     def kernel_interrupt(self, notebook_path: str | None = None) -> dict[str, Any]:
-        path = self._kernel_tools_path_arg(notebook_path)
+        path, basis = self._kernel_tools_resolve(notebook_path)
         k = self._canonical(path)
         h = self._handles.get(k)
+        base = {
+            **_server_tool_digest(),
+            **self.notebook_resolution_meta(notebook_path, path),
+            "notebook_path_resolution_basis": basis,
+            **self.kernel_field_hints_fragment(),
+        }
         if h is None:
             return {
-                **_server_tool_digest(),
+                **base,
                 "ok": False,
                 "message": "No kernel session for this notebook yet.",
                 "notebook_path": str(path),
             }
         result = dict(h.kernel_interrupt())
         result["notebook_path"] = str(path)
-        return {**_server_tool_digest(), **result}
+        return {**base, **result}
 
     def kernel_status(self, notebook_path: str | None = None) -> dict[str, Any]:
-        path = self._kernel_tools_path_arg(notebook_path)
+        path, basis = self._kernel_tools_resolve(notebook_path)
         k = self._canonical(path)
         h = self._handles.get(k)
+        base = {
+            **_server_tool_digest(),
+            **self.notebook_resolution_meta(notebook_path, path),
+            "notebook_path_resolution_basis": basis,
+            **self.kernel_field_hints_fragment(),
+        }
         if h is None:
             return {
-                **_server_tool_digest(),
+                **base,
                 "notebook_path": str(path),
                 "kernel_generation": 0,
                 "kernel_alive": False,
@@ -415,7 +542,37 @@ class KernelSession:
         out = h.kernel_status()
         out["notebook_path"] = str(path)
         out["notebook_kernel_active"] = True
-        return {**_server_tool_digest(), **out}
+        return {**base, **out}
+
+    def kernel_ping(self, notebook_path: str | None = None) -> dict[str, Any]:
+        """Cheap liveness ping: resolves path like kernel_* without loading notebook JSON."""
+
+        path, basis = self._kernel_tools_resolve(notebook_path)
+        k = self._canonical(path)
+        h = self._handles.get(k)
+        base = {
+            **_server_tool_digest(),
+            **self.notebook_resolution_meta(notebook_path, path),
+            "notebook_path_resolution_basis": basis,
+            **self.kernel_field_hints_fragment(),
+        }
+        if h is None:
+            return {
+                **base,
+                "notebook_path": str(path),
+                "kernel_generation": 0,
+                "kernel_alive": False,
+                "interrupted_flag": False,
+                "notebook_kernel_active": False,
+                "note": (
+                    "No pooled kernel slot for this path yet; run(run or kernel_restart) establishes the handle "
+                    "(this ping did not parse the .ipynb)."
+                ),
+            }
+        st = dict(h.kernel_status())
+        st["notebook_path"] = str(path)
+        st["notebook_kernel_active"] = True
+        return {**base, **st}
 
     def check_allowed_notebook(self, notebook_path: Path) -> None:
         cand = notebook_path.expanduser().resolve()
@@ -475,10 +632,10 @@ class KernelSession:
                 ap = companion_path_for_notebook(notebook_path)
                 yprimary = companion_yaml_paths_for_notebook(notebook_path)[0]
                 raise FileNotFoundError(
-                    "companion_strict=true but companion file missing: looked for "
+                    f"{COMPANION_STRICT_MISSING} Looked for "
                     f"{ap.name} or {yprimary.name} (or `.companion.yml`).",
                 )
-            return {"status": "skipped", "note": "No companion beside this notebook (.apynb or .companion.yaml|.yml)."}
+            return {"status": "skipped", "note": COMPANION_SKIPPED_NOTE}
 
         self.check_allowed_notebook(cand)
         vr = validate_companion_file(notebook_path=notebook_path, notebook=nb, companion_file=cand)
@@ -533,21 +690,20 @@ class KernelSession:
         validate_notebook_node(nb)
         save_notebook(nb, path)
         stamp = notebook_file_stamp(path)
-        stale_note = None
-        if default_companion_path_for_notebook(path) is not None:
-            stale_note = (
-                "Companion mirror present beside notebook; rerun export-apynb / refresh YAML or "
-                "`companion_validate` may report drift."
-            )
+        stale_note = (
+            COMPANION_MIRROR_STALE_HINT if default_companion_path_for_notebook(path) is not None else None
+        )
+        edit_hint = NOTEBOOK_EDIT_PERSISTED_VS_KERNEL_HINT if patch_effect_log else None
 
         return {
             **_server_tool_digest(),
             "status": "ok",
-            "notebook_path": str(path.resolve()),
+            **self.notebook_resolution_meta(notebook_path, path),
             "notebook_file_stamp": stamp,
             "cells_summary": notebook_cells_summary(nb),
             "patch_effect_log": patch_effect_log,
             "companion_maybe_stale_note": stale_note,
+            "notebook_edit_kernel_hint": edit_hint,
         }
 
     def cells_apply(
@@ -591,11 +747,12 @@ class KernelSession:
         return {
             **_server_tool_digest(),
             "status": "ok",
-            "notebook_path": rep["notebook_path"],
+            **self.notebook_resolution_meta(notebook_path, Path(str(rep["notebook_path"]))),
             "cells_updated": updated_rows,
             "edits_applied_last_wins_duplicates": list(merged.keys()),
             "notebook_file_stamp": rep["notebook_file_stamp"],
             "companion_maybe_stale_note": stale_note,
+            "notebook_edit_kernel_hint": rep.get("notebook_edit_kernel_hint"),
         }
 
     def variable_preview(
@@ -604,6 +761,7 @@ class KernelSession:
         *,
         names: Any,
         max_chars_each: int = 400,
+        names_strict: bool = False,
     ) -> dict[str, Any]:
         """Return capped ``repr`` snapshots for identifiers in live kernel globals (identifiers only)."""
 
@@ -630,15 +788,34 @@ class KernelSession:
             raise ValueError("names must be a string identifier or non-empty list of identifiers.")
 
         id_re = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-        picked: list[str] = []
+        names_omitted_invalid: list[str] = []
+        seen_inv: set[str] = set()
+        ordered_valid: list[str] = []
+        seen_ok: set[str] = set()
         for raw in name_list:
-            rid = raw.strip()
+            rid = str(raw).strip()
             if not id_re.fullmatch(rid):
+                key = str(raw)
+                if key not in seen_inv:
+                    seen_inv.add(key)
+                    names_omitted_invalid.append(key)
                 continue
-            if rid not in picked:
-                picked.append(rid)
-            if len(picked) >= 32:
-                break
+            if rid not in seen_ok:
+                seen_ok.add(rid)
+                ordered_valid.append(rid)
+
+        _MAX_PREVIEW_NAMES = 32
+        picked = ordered_valid[:_MAX_PREVIEW_NAMES]
+        names_truncated_after_pool_cap = ordered_valid[_MAX_PREVIEW_NAMES:]
+
+        if bool(names_strict) and names_omitted_invalid:
+            shown = ", ".join(names_omitted_invalid[:12])
+            if len(names_omitted_invalid) > 12:
+                shown += ", …"
+            raise ValueError(
+                f"names_strict=true rejects non-identifier names (no attributes/dots/spaces): {shown}",
+            )
+
         if not picked:
             raise ValueError(
                 "No valid identifiers after sanitization — pass dotted-free Python identifiers (e.g. df, xs).",
@@ -672,6 +849,14 @@ class KernelSession:
         handle = self._get_handle(path)
         t0 = time.monotonic()
         handle._ensure_kernel(art_prefix=os.environ.get("LLM_NB_ART_PREFIX"))
+
+        def _kern_ctx() -> dict[str, Any]:
+            k2 = handle.kernel_status()
+            return {"kernel_alive": k2["kernel_alive"], "kernel_generation": k2["kernel_generation"]}
+
+        def _res_ctx() -> dict[str, str | bool]:
+            return self.notebook_resolution_meta(notebook_path, path)
+
         outs, exc = handle.transient_code_cell_execute(path.parent, snippet)
         wall_ms = int((time.monotonic() - t0) * 1000)
 
@@ -679,8 +864,8 @@ class KernelSession:
             return {
                 **_server_tool_digest(),
                 "status": "error",
-                "notebook_path": str(path.resolve()),
-                "kernel_generation": handle.kernel_generation,
+                **_res_ctx(),
+                **_kern_ctx(),
                 "names_requested": picked,
                 "preview_wall_clock_ms": wall_ms,
                 "execution_error": {"ename": str(exc.ename), "evalue": str(exc.evalue)},
@@ -693,8 +878,8 @@ class KernelSession:
             return {
                 **_server_tool_digest(),
                 "status": "error",
-                "notebook_path": str(path.resolve()),
-                "kernel_generation": handle.kernel_generation,
+                **_res_ctx(),
+                **_kern_ctx(),
                 "names_requested": picked,
                 "preview_wall_clock_ms": wall_ms,
                 "execution_error": {"ename": kd["ename"], "evalue": kd["evalue"]},
@@ -719,8 +904,8 @@ class KernelSession:
             return {
                 **_server_tool_digest(),
                 "status": "error",
-                "notebook_path": str(path.resolve()),
-                "kernel_generation": handle.kernel_generation,
+                **_res_ctx(),
+                **_kern_ctx(),
                 "names_requested": picked,
                 "preview_wall_clock_ms": wall_ms,
                 "note": (
@@ -732,18 +917,33 @@ class KernelSession:
         out_ok: dict[str, Any] = {
             **_server_tool_digest(),
             "status": "ok",
-            "notebook_path": str(path.resolve()),
-            "kernel_generation": handle.kernel_generation,
+            **_res_ctx(),
+            **_kern_ctx(),
             "names_requested": picked,
             "max_chars_each_used": cap,
             "preview_wall_clock_ms": wall_ms,
             "previews": previews,
         }
+        if names_omitted_invalid:
+            out_ok["names_omitted_invalid"] = names_omitted_invalid
+        if names_truncated_after_pool_cap:
+            out_ok["names_truncated_after_pool_cap"] = names_truncated_after_pool_cap
         if previews and all(v == "<not defined>" for v in previews.values()):
-            out_ok["cold_kernel_hint"] = (
-                "Every requested name is <not defined>; the kernel may be cold—run prerequisite cells with "
-                "`run` first."
-            )
+            diag_reasons = [
+                "all_requested_names_absent_from_kernel_globals",
+                "verify_resolved_notebook_path_matches_artefact_you_executed_with_run",
+                "run_prerequisite_code_cells_if_definitions_not_yet_executed",
+                "kernel_restart_or_fresh_kernel_clears_user_definitions",
+            ]
+            if len(picked) < len(name_list) or names_omitted_invalid or names_truncated_after_pool_cap:
+                diag_reasons.append("some_requested_names_were_removed_invalid_or_truncated_to_pool_cap")
+            out_ok["preview_diagnostic"] = {
+                "reasons_checked": diag_reasons,
+                "hint": (
+                    "Every name is <not defined> in globals(); that does not single out a cause—confirm "
+                    "notebook_path, rerun defining cells, or check for a recent kernel_restart."
+                ),
+            }
         return out_ok
 
     def inspect_companion(
@@ -851,7 +1051,9 @@ class KernelSession:
             raise FileNotFoundError(f"Notebook not found: {path}")
 
         self.check_allowed_notebook(path)
-        return path
+        resolved = path.resolve()
+        self._touch_mru(resolved)
+        return resolved
 
     def _notebook_load_and_execution_plan(
         self,
@@ -919,7 +1121,7 @@ class KernelSession:
         out: dict[str, Any] = {
             **_server_tool_digest(),
             "status": "ok",
-            "notebook_path": str(path.resolve()),
+            **self.notebook_resolution_meta(notebook_path, path),
             "selector_kind": kind,
             "selector_arg": sid,
             "code_cell_indices": code_idx,
@@ -935,6 +1137,124 @@ class KernelSession:
         if companion_summary is not None and companion_summary.get("status") != "skipped":
             out["companion"] = companion_summary
         return out
+
+    def notebook_execution_plan(
+        self,
+        notebook_path: str | None = None,
+        cell_id: str | None = None,
+        run_all: bool = False,
+        run_until_cell_id: str | None = None,
+        validate_first: bool = True,
+        companion_path: str | None = None,
+        companion_strict: bool = False,
+    ) -> dict[str, Any]:
+        """Notebook structure + companion gate; optional selector (same semantics as ``dry_run``) or structural-only probe."""
+
+        path = self._canonical_run_path(notebook_path)
+        handle = self._get_handle(path)
+        nb, _ = load_notebook_ensuring_cell_ids(path)
+        if validate_first:
+            validate_notebook_node(nb)
+
+        companion_summary = self._companion_gate(path, nb, self._strip_opt(companion_path), companion_strict)
+        code_idx = indices_of_code_cells(nb)
+
+        cid = self._strip_opt(cell_id)
+        rid = self._strip_opt(run_until_cell_id)
+        sel_cell = cid is not None
+        sel_until = rid is not None
+        sel_all = run_all is True
+        picked = sel_cell + sel_until + sel_all
+
+        if picked > 1:
+            modes: list[str] = []
+            if sel_cell:
+                modes.append("cell_id")
+            if sel_all:
+                modes.append("run_all=true")
+            if sel_until:
+                modes.append("run_until_cell_id")
+            raise ValueError(
+                "Conflicting run targets; pass only one mode. Activated: " + ", ".join(sorted(modes)) + ".",
+            )
+
+        if picked == 0:
+            kind, sid = ("structural_probe", None)
+            indices: list[int] = []
+        else:
+            selector = self._resolve_run_selector(
+                notebook_has_code_cells=bool(code_idx),
+                cell_id=cell_id,
+                run_all=run_all,
+                run_until_cell_id=run_until_cell_id,
+            )
+            kind, sid = selector
+            indices = self._indices_from_selector(nb, selector)
+
+        cells_planned: list[dict[str, Any]] = []
+        for idx in indices:
+            cell = nb.cells[idx]
+            cid_row = str(cell.get("metadata", {}).get("cell_id", "") or "").strip()
+            cells_planned.append({"cell_index": idx, "cell_id": cid_row or None})
+
+        out: dict[str, Any] = {
+            **_server_tool_digest(),
+            "status": "ok",
+            **self.notebook_resolution_meta(notebook_path, path),
+            "selector_kind": kind,
+            "selector_arg": sid,
+            "code_cell_indices": code_idx,
+            "execution_cell_indices": indices,
+            "cells_planned": cells_planned,
+            "cells_planned_n": len(indices),
+            "kernel_status_preview": handle.kernel_status(),
+            "note": (
+                "No execution—kernel not started here. selector_kind=structural_probe lists code cells only; "
+                "pass exactly one of cell_id / run_all / run_until_cell_id for the same execution_cell_indices as dry_run. "
+                "dry_run still requires a selector—use this tool when you need ids/indices before choosing a target."
+            ),
+        }
+        if companion_summary is not None and companion_summary.get("status") != "skipped":
+            out["companion"] = companion_summary
+        return out
+
+    def run_stream_read(
+        self,
+        notebook_path: str | None = None,
+        *,
+        run_id: str,
+        stream: str = "stdout",
+        byte_offset: int = 0,
+        max_bytes: int | None = None,
+    ) -> dict[str, Any]:
+        """Bounded read of spill artifacts (``run`` with ``mcp_stream_spilled``)."""
+
+        nb_path_arg = notebook_path or (str(self.default_notebook) if self.default_notebook else "")
+        if not str(nb_path_arg).strip():
+            raise ValueError(
+                "notebook_path is required unless the MCP server started with --notebook / -n.",
+            )
+        path = normalize_allowed_path(nb_path_arg)
+        if not path.exists():
+            raise FileNotFoundError(f"Notebook not found: {path}")
+        self.check_allowed_notebook(path)
+
+        cap = int(max_bytes) if max_bytes is not None else run_stream_read_max_bytes()
+        cap = max(256, min(cap, 2_000_000))
+        slice_info = read_run_stream_slice(
+            path,
+            run_id,
+            stream,
+            byte_offset=int(byte_offset),
+            max_bytes=cap,
+        )
+        return {
+            **_server_tool_digest(),
+            "status": "ok",
+            **self.notebook_resolution_meta(notebook_path, path),
+            **slice_info,
+            "run_stream_read_max_bytes_effective": cap,
+        }
 
     def run(
         self,
@@ -952,6 +1272,8 @@ class KernelSession:
         companion_strict: bool = False,
         compact_assistant_quick: bool = False,
         strip_ansi_streams: bool = False,
+        persist_stream_outputs: str = "full",
+        omit_stream_chunks: bool | None = None,
     ) -> dict[str, Any]:
         t0 = time.monotonic()
         mode_eff = (mode or self.default_mode).lower()
@@ -1015,6 +1337,10 @@ class KernelSession:
         if not indices:
             sm = stream_summary_for_tool("", "", stdout_chunks={}, stderr_chunks={})
             phase_ms_early = {"pre_execute_ms": int((time.monotonic() - t0) * 1000)}
+            budget_early = mcp_stream_char_budget()
+            persist_early = (persist_stream_outputs or "full").strip().lower()
+            if persist_early not in ("full", "external_only"):
+                persist_early = "full"
             payload = self._payload(
                 mode_eff,
                 path,
@@ -1045,24 +1371,35 @@ class KernelSession:
                 phase_timings_ms=phase_ms_early,
                 kernel_generation=handle.kernel_generation,
                 compact_assistant_quick=compact_quick,
+                notebook_path_arg=notebook_path,
+                stream_delivery="inline",
+                stream_artifacts=None,
+                mcp_stream_spilled=False,
+                mcp_stream_char_budget=budget_early,
+                persist_stream_outputs=persist_early,
             )
             stamp = notebook_file_stamp(path)
-            append_manifest(
-                path.parent / "manifest.jsonl",
-                {
-                    "run_id": run_id,
-                    "ts_ms": int(time.time() * 1000),
-                    "mode": mode_eff,
-                    "notebook_path": str(path),
-                    "notebook_file_stamp": stamp,
-                    "python_env_snapshot": python_env_snapshot(mode_eff),
-                    "kernel_generation": handle.kernel_generation,
-                    "cells_executed": [],
-                    "status": "ok",
-                    "note": "no_code_cells",
-                    "companion": companion_summary,
-                },
-            )
+            man_early: dict[str, Any] = {
+                "run_id": run_id,
+                "ts_ms": int(time.time() * 1000),
+                "mode": mode_eff,
+                "notebook_path": str(path),
+                "notebook_file_stamp": stamp,
+                "python_env_snapshot": payload["python_env_snapshot"],
+                "kernel_generation": handle.kernel_generation,
+                "cells_executed": [],
+                "status": "ok",
+                "note": "no_code_cells",
+                "companion": companion_summary,
+            }
+            if mode_eff == "record":
+                meta_e = env_snapshot_ttl_meta_from_snapshot(payload["python_env_snapshot"])
+                if meta_e:
+                    man_early["python_env_snapshot_meta"] = meta_e
+            t_ma0 = time.monotonic()
+            append_manifest(path.parent / "manifest.jsonl", man_early)
+            manifest_ms_early = int((time.monotonic() - t_ma0) * 1000)
+            payload.setdefault("phase_timings_ms", {})["manifest_append_wall_ms"] = manifest_ms_early
             handle._generation_at_previous_tool_end = handle.kernel_generation
             return payload
 
@@ -1159,6 +1496,17 @@ class KernelSession:
         t_after_loop = time.monotonic()
         phase_ms["notebook_execute_loop_ms"] = int((t_after_loop - t_loop_start) * 1000)
 
+        combined_stream_chars = sum(len(x) for x in stdout_acc) + sum(len(x) for x in stderr_acc)
+        budget_eff = mcp_stream_char_budget()
+        persist_eff = (persist_stream_outputs or "full").strip().lower()
+        if persist_eff not in ("full", "external_only"):
+            persist_eff = "full"
+        phase_ms["mcp_stream_char_budget"] = budget_eff
+        phase_ms["combined_stream_chars_observed"] = combined_stream_chars
+
+        if persist_eff == "external_only" and combined_stream_chars > budget_eff and executed_in_order:
+            strip_cell_outputs_matching_type(nb, executed_in_order, output_type="stream")
+
         t_before_save = time.monotonic()
         save_notebook(nb, path)
         t_after_save = time.monotonic()
@@ -1180,8 +1528,35 @@ class KernelSession:
         stdout_joined = "\n".join(stdout_acc).strip()
         stderr_joined = "\n".join(stderr_acc).strip()
 
-        so_chunks = chunk_text(stdout_joined, self.chunk_chars) if stdout_joined else {}
-        se_chunks = chunk_text(stderr_joined, self.chunk_chars) if stderr_joined else {}
+        spill = combined_stream_chars > budget_eff
+        stream_artifacts_meta: dict[str, Any] | None = None
+        omit_chunks_effective = _omit_stream_chunks_requested(omit_stream_chunks) and not spill
+
+        if spill:
+            stream_artifacts_meta = write_run_stream_artifacts(
+                path,
+                run_id,
+                stdout_text=stdout_joined,
+                stderr_text=stderr_joined,
+                extra_meta={
+                    "mode": mode_eff,
+                    "status": status,
+                    "cells_executed": cells_executed_ids,
+                    "persist_stream_outputs": persist_eff,
+                },
+            )
+            so_chunks, se_chunks = {}, {}
+        elif omit_chunks_effective:
+            so_chunks, se_chunks = {}, {}
+        else:
+            so_chunks = chunk_text(stdout_joined, self.chunk_chars) if stdout_joined else {}
+            se_chunks = chunk_text(stderr_joined, self.chunk_chars) if stderr_joined else {}
+
+        stream_delivery = (
+            "artifacts_plus_preview"
+            if spill
+            else ("inline_omit_chunk_maps" if omit_chunks_effective else "inline")
+        )
         sm = stream_summary_for_tool(
             stdout_joined,
             stderr_joined,
@@ -1228,24 +1603,38 @@ class KernelSession:
             phase_timings_ms=phase_ms,
             kernel_generation=handle.kernel_generation,
             compact_assistant_quick=compact_quick,
+            notebook_path_arg=notebook_path,
+            stream_delivery=stream_delivery,
+            stream_artifacts=stream_artifacts_meta,
+            mcp_stream_spilled=spill,
+            mcp_stream_char_budget=budget_eff,
+            persist_stream_outputs=persist_eff,
         )
 
-        append_manifest(
-            path.parent / "manifest.jsonl",
-            {
-                "run_id": run_id,
-                "ts_ms": int(time.time() * 1000),
-                "mode": mode_eff,
-                "notebook_path": str(path),
-                "notebook_file_stamp": payload["notebook_file_stamp"],
-                "python_env_snapshot": payload["python_env_snapshot"],
-                "kernel_generation": handle.kernel_generation,
-                "cells_executed": cells_executed_ids,
-                "status": status,
-                "stderr_digest_tail": stderr_joined[-512:],
-                "halt_on_error": halt_on_error,
-                "companion": companion_summary,
-            },
+        man_row: dict[str, Any] = {
+            "run_id": run_id,
+            "ts_ms": int(time.time() * 1000),
+            "mode": mode_eff,
+            "notebook_path": str(path),
+            "notebook_file_stamp": payload["notebook_file_stamp"],
+            "python_env_snapshot": payload["python_env_snapshot"],
+            "kernel_generation": handle.kernel_generation,
+            "cells_executed": cells_executed_ids,
+            "status": status,
+            "stderr_digest_tail": stderr_joined[-512:],
+            "halt_on_error": halt_on_error,
+            "companion": companion_summary,
+        }
+        if stream_artifacts_meta:
+            man_row["stream_artifacts"] = stream_artifacts_meta
+        if mode_eff == "record":
+            meta_m = env_snapshot_ttl_meta_from_snapshot(payload["python_env_snapshot"])
+            if meta_m:
+                man_row["python_env_snapshot_meta"] = meta_m
+        t_ma = time.monotonic()
+        append_manifest(path.parent / "manifest.jsonl", man_row)
+        payload.setdefault("phase_timings_ms", {})["manifest_append_wall_ms"] = int(
+            (time.monotonic() - t_ma) * 1000
         )
 
         handle._generation_at_previous_tool_end = handle.kernel_generation
@@ -1332,10 +1721,20 @@ class KernelSession:
         phase_timings_ms: dict[str, int] | None = None,
         compact_assistant_quick: bool = False,
         kernel_generation: int,
+        notebook_path_arg: str | None = None,
+        stream_delivery: str = "inline",
+        stream_artifacts: dict[str, Any] | None = None,
+        mcp_stream_spilled: bool = False,
+        mcp_stream_char_budget: int | None = None,
+        persist_stream_outputs: str = "full",
     ) -> dict[str, Any]:
         t_pa = time.monotonic()
         stamp = notebook_file_stamp(notebook_path)
+        t_fp = time.perf_counter()
         env_snap = python_env_snapshot(mode)
+        fingerprint_ms = int((time.perf_counter() - t_fp) * 1000)
+        if phase_timings_ms is not None:
+            phase_timings_ms["record_env_fingerprint_ms"] = fingerprint_ms
         sm_eff = stream_summary or {}
         uch, sch = sm_eff.get("stdout_chars") or 0, sm_eff.get("stderr_chars") or 0
         if uch + sch == 0:
@@ -1372,21 +1771,31 @@ class KernelSession:
                 "Repeated kernel errors accumulate in kernel_errors_truncated."
             )
             assistant_quick["kernel_wall_clock_hint"] = (
-                "kernel_runtime_ms is wall-clock from run() entry through built run dict (excluding "
-                "manifest append and MCP serialize of the reply); see phase_timings_ms."
+                "kernel_runtime_ms and server_run_handler_wall_ms (same scalar today) exclude manifest append "
+                "and MCP UTF-8 JSON framing; phase_timings_ms.record_env_fingerprint_ms isolates record-mode env hashing; "
+                "see timings_truncation_hint."
             )
+        if mode == "record" and not compact_assistant_quick:
+            for k in (
+                "env_snapshot_cache_hit",
+                "env_snapshot_ttl_sec_configured",
+                "env_snapshot_cache_age_mono_sec",
+                "env_snapshot_policy_version",
+            ):
+                if k in env_snap:
+                    assistant_quick[k] = env_snap[k]
 
-        # Outcomes first for primacy/recency bias; chunks and env blobs last.
         res: dict[str, Any] = {
-            "assistant_quick": assistant_quick,
+            "status": status,
             "run_id": run_id,
             "mode": mode,
-            "status": status,
         }
+        res.update(self.notebook_resolution_meta(notebook_path_arg, notebook_path))
         if execution_error is not None:
             res["execution_error"] = execution_error
         if error_cell_id:
             res["error_cell_id"] = error_cell_id
+        res["assistant_quick"] = assistant_quick
         res.update(
             {
                 "cells_executed": cells_executed,
@@ -1395,7 +1804,6 @@ class KernelSession:
                 "restart_since_previous_tool_call": restart_since_previous,
                 "outputs_might_be_stale": outputs_might_be_stale,
                 "stale_notes": stale_notes,
-                "notebook_path": str(notebook_path),
                 "stream_summary": sm_eff,
                 "suggested_figure_prefix": suggested_figure_prefix,
                 "output_files": output_files,
@@ -1416,10 +1824,25 @@ class KernelSession:
                 res["streams_by_cell_truncated"] = True
         if kernel_errors_truncated:
             res["kernel_errors_truncated"] = kernel_errors_truncated
+
+        res["stream_truncation_semantics"] = dict(STREAM_SUFFIX_DESCRIPTOR)
+        res["stream_delivery"] = stream_delivery
+        res["persist_stream_outputs_used"] = persist_stream_outputs
+        if mcp_stream_char_budget is not None:
+            res["mcp_stream_char_budget_used"] = mcp_stream_char_budget
+        if mcp_stream_spilled:
+            res["mcp_stream_spilled"] = True
+        if stream_artifacts:
+            res["stream_artifacts"] = stream_artifacts
+
         if phase_timings_ms is not None:
             phase_timings_ms["payload_assembly_ms"] = int((time.monotonic() - t_pa) * 1000)
             res["phase_timings_ms"] = phase_timings_ms
+            res["timings_truncation_hint"] = (
+                "phase_timings_ms values are integer milliseconds from monotonic clocks; sub-ms work rounds to 0."
+            )
         res["kernel_runtime_ms"] = int((time.monotonic() - t0) * 1000)
+        res["server_run_handler_wall_ms"] = res["kernel_runtime_ms"]
         if debug:
             res["debug"] = True
         return res
