@@ -19,11 +19,9 @@ def save_notebook(nb: nbformat.NotebookNode, path: str | Any) -> None:
 
 
 def ensure_cell_ids(nb: nbformat.NotebookNode, persist_path: str | Any | None = None) -> bool:
-    """Assign metadata.cell_id to every code cell; return True if notebook was modified."""
+    """Assign metadata.cell_id to every cell (code, markdown, raw); return True if modified."""
     changed = False
     for cell in nb.cells:
-        if cell.cell_type != "code":
-            continue
         meta = cell.setdefault("metadata", {})
         if not meta.get("cell_id"):
             meta["cell_id"] = str(uuid.uuid4())
@@ -33,18 +31,33 @@ def ensure_cell_ids(nb: nbformat.NotebookNode, persist_path: str | Any | None = 
     return changed
 
 
+def load_notebook_ensuring_cell_ids(path: str | Any) -> tuple[nbformat.NotebookNode, bool]:
+    """Read once from disk, assign persisted ``cell_id`` when missing, return ``(nb, changed_on_disk)``."""
+
+    nb = load_notebook(path)
+    changed = ensure_cell_ids(nb, persist_path=path)
+    return nb, changed
+
+
 def indices_of_code_cells(nb: nbformat.NotebookNode) -> list[int]:
     return [i for i, c in enumerate(nb.cells) if c.cell_type == "code"]
 
 
-def cell_index_for_id(nb: nbformat.NotebookNode, cell_id: str) -> int:
+def cell_index_for_stable_id(nb: nbformat.NotebookNode, cell_id: str) -> int:
     for i, cell in enumerate(nb.cells):
-        if cell.cell_type != "code":
-            continue
-        cid = cell.get("metadata", {}).get("cell_id")
+        cid = cell.get("metadata", {}).get("cell_id") if isinstance(cell.get("metadata"), dict) else None
         if cid == cell_id:
             return i
-    raise LookupError(f"Unknown code cell_id: {cell_id}")
+    raise LookupError(f"Unknown cell_id: {cell_id}")
+
+
+def cell_index_for_id(nb: nbformat.NotebookNode, cell_id: str) -> int:
+    """Resolve a **code** cell index by ``metadata.cell_id`` (used by ``run`` selectors)."""
+
+    i = cell_index_for_stable_id(nb, cell_id)
+    if getattr(nb.cells[i], "cell_type", None) != "code":
+        raise LookupError(f"cell_id {cell_id!r} is not a code cell")
+    return i
 
 
 def validate_notebook_node(nb: nbformat.NotebookNode) -> None:

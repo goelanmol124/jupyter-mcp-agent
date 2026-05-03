@@ -1,7 +1,109 @@
 # Changelog
 
-## Unreleased
+## [0.2.4] — 2026-05-03
 
+### Added
+
+- MCP **`notebook_cells_patch`**: ordered batch **`insert`** / **`delete`** / **`move`** / **`set_source`** (each **`insert`** or **`move`**: exactly one of **`after_cell_id`**, **`before_cell_id`**, **`at_index`**); transactional preview when **`validate_first=true`**; response includes **`cells_summary`**, **`patch_effect_log`**, stamp.
+- **`KernelSession.notebook_cells_patch`** with **`cells_apply`** implemented as delegated **`set_source`** ops (**code cells only**).
+
+### Changed
+
+- **`ensure_cell_ids`**: writes **`metadata.cell_id`** on **markdown** and **raw** cells too (stable ids for MCP structural edits).
+- **`cell_index_for_stable_id`** (new export on **`notebook`**) vs **`cell_index_for_id`** (**code**-only for **`run`** resolution).
+- **`notebook_outline`** lists **`cell_id`** for markdown/raw when assigned.
+
+### Documentation
+
+- README tools section, MCP **`instructions`**, **research-notebook-mcp** skill/rule.
+
+---
+
+## [0.2.3] — 2026-05-03
+
+### Added
+
+- **`phase_timings_ms`** breakdown: **`notebook_save_after_execute_ms`** vs **`streams_previews_prepare_ms`** nested under **`post_execute_through_chunks_ms`** totals (helps separate fat `.ipynb` writes from preview/stream chunk assembly).
+
+### Fixed
+
+- **`kernel_runtime_ms`**: computed after the **`run`** response dict is fully assembled (`_payload` tail was previously omitted when **`python_env_snapshot`** ran early).
+
+---
+
+## [0.2.2] — 2026-05-03
+
+### Fixed
+
+- **`record` env snapshot**: scan installed distributions once and match **only** the fixed scientific whitelist (no alphabetical `[:200]` slice that could omit real installs or waste work on giant envs). **`packages_summary_or_hash`** in manifests may **differ from 0.2.1** for the same notebook when whitelisted packages are present—that reflects the corrected selection, not flaky hashing.
+
+### Added
+
+- **`LLM_JUPYTER_RECORD_ENV_SNAPSHOT_CACHE_SEC`**: optional short-lived process cache for **`record`** **python_env_snapshot** (fingerprint `sys.prefix` / `sys.executable` / policy revision; may lag mid-session **`pip install`** until TTL).
+- **`server_info`:** **`notebook_kernel_pool_n`**, **`notebook_kernel_pool_paths_resolved`** — warm notebook paths (**MRU-last**) for correlating LRU evictions with **`LLM_JUPYTER_MAX_NOTEBOOK_KERNELS`**.
+- **`load_notebook_ensuring_cell_ids`**: single disk read plus **`ensure_cell_ids`** before runs / edits (fewer redundant loads on active paths).
+
+### Documentation
+
+- MCP **`instructions`**, README env table, **research-notebook-mcp** skill/rule: LRU pool, **`phase_timings_ms`**, **`record`** snapshot cost vs optional cache, mega-stdout and **`notebook_execute_loop_ms`** (no silent truncation).
+
+---
+
+## [0.2.1] — 2026-05-03
+
+### Added
+
+- **`dry_run` MCP tool** and **`resolve_run_targets`** session helper: same selectors as **`run`**, no kernel start or execution.
+- **`run`:** **`strip_ansi_streams`** plus env **`LLM_JUPYTER_STRIP_ANSI_STREAMS`** to strip ANSI escapes from captured streams.
+- **`notebook_outline`:** optional **`include_sources`** with **`max_source_chars`**, **`max_cells_with_sources`**, **`max_total_source_chars`** caps.
+- **MCP `status:error`:** **`exc_type`**, **`exc_message`** (alongside **`tool_error`** / **`traceback`**).
+- **`server_info`:** **`tools_n_deprecation_hint`** (**`tools_n`** remains for older clients).
+
+### Changed
+
+- **`run` / `dry_run`:** **`LookupError`** for unknown **`cell_id`** / **`run_until_cell_id`** includes the **resolved notebook path** (footgun when **`-n`** default differs from the outline you used).
+- **`variable_preview`:** **`cold_kernel_hint`** wording when every name is **`<not defined>`**.
+- **`cells_apply`:** MCP description clarifies **`cell_id`** / **`source`** edit shape.
+
+### Documentation
+
+- **`research-notebook-mcp-workflow`** skill and **`research-notebook-mcp-agent`** rule: compact/ANSI/stream-index and **`server_info`** trust notes.
+
+---
+
+## [0.2.0] — 2026-05-03
+
+Agent trust, payload hygiene, safer notebook introspection defaults.
+
+### Breaking
+
+- **`notebook_outline`:** **`persist_cell_ids` defaults to `false`** — outline is read-mostly unless **`persist_cell_ids=true`** (no automatic **`cell_id`** writes to disk).
+
+### Added
+
+- **`server_info`:** **`process_pid`**, **`effective_allowed_roots`**, **`notebook_exclusive_lock_acquire_timeout_sec`**, **`notebook_exclusive_lock_waits_forever`**.
+- **`run`:** **`compact_assistant_quick`** plus env **`LLM_JUPYTER_COMPACT_ASSISTANT_QUICK`** to omit long static **`assistant_quick`** strings.
+- **Kernel MCP tools:** success payloads include **`status: "ok"`** together with existing fields.
+
+### Changed
+
+- **Stale notes after `run`:** clearer distinction between “no full rerun at this **`kernel_generation`** yet” and “**`kernel_generation`** changed since the previous MCP tool ended.”
+- **`variable_preview`:** **`cold_kernel_hint`** only when every requested name is **`<not defined>`**.
+- **MCP `status:error`:** tracebacks prefer **`TracebackException`** formatting (exception chains).
+- **`notebook_validate`:** docstring positions the tool vs **`run(..., validate_first=true)`** (tool kept).
+- **`cells_apply`:** MCP parameter typing for **`edits`** as **`list[dict[str, str]]`**.
+- **MCP `instructions`:** stream digest ladder, PID / **`kernel_generation`** lifecycle across process restarts, compact payload switch.
+
+### Fixed
+
+- **MCP `status:error`:** avoid passing unsupported **`chain=`** into **`TracebackException.from_exception`** on Python 3.12 (prevented malformed JSON tracebacks leaking a secondary **`TypeError`**).
+
+
+### Documentation
+
+- **`research-notebook-mcp-workflow`** / README remain the live agent workflow references.
+
+---
 
 ## [0.1.2] — 2026-05-03
 

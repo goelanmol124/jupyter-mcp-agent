@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> None:
 
     exp = sub.add_parser(
         "export-apynb",
-        help="Write a `.apynb` sidecar from code cells (persists missing metadata.cell_id).",
+        help="Write a JSON (.apynb) or YAML (.companion.yaml) sidecar mirroring code cells (persists metadata.cell_id).",
     )
     exp.add_argument("notebook", help="Path to .ipynb")
     exp.add_argument(
@@ -75,7 +75,13 @@ def main(argv: list[str] | None = None) -> None:
         "--out",
         default=None,
         metavar="PATH",
-        help="Output `.apynb` (default: same stem as notebook)",
+        help="Output companion path (defaults: *.apynb for json, *.companion.yaml for yaml)",
+    )
+    exp.add_argument(
+        "--format",
+        choices=["json", "yaml"],
+        default="json",
+        help="Companion encoding (YAML requires PyYAML, declared as a dependency).",
     )
 
     mt = sub.add_parser(
@@ -112,7 +118,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "export-apynb":
         from llm_jupyter.companion import write_companion_from_notebook
 
-        outp = write_companion_from_notebook(args.notebook, args.out)
+        outp = write_companion_from_notebook(args.notebook, args.out, fmt=args.format)
         print(outp)
         return
 

@@ -1,6 +1,9 @@
-"""Optional **.apynb** sidecar JSON: mirrors code-cell sources keyed by nbformat metadata.cell_id.
+"""Companion mirror files beside an ``.ipynb``.
 
-If `notebook.ipynb` and `notebook.apynb` disagree, validation fails loudly before kernel work.
+Auto-discovery prefers same-stem **``.apynb``** (JSON), else **``{stem}.companion.yaml``**
+or **``{stem}.companion.yml``**.
+
+If sidecar disagree with notebook sources + ``metadata.cell_id``, validation fails loudly before kernel work.
 """
 
 from __future__ import annotations
@@ -9,9 +12,32 @@ import json
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 
 def companion_path_for_notebook(notebook_path: Path) -> Path:
     return notebook_path.with_suffix(".apynb")
+
+
+def companion_yaml_paths_for_notebook(notebook_path: Path) -> list[Path]:
+    """Stable candidates (first existing wins after `.apynb`)."""
+    stem = notebook_path.stem
+    parent = notebook_path.parent
+    return [
+        parent / f"{stem}.companion.yaml",
+        parent / f"{stem}.companion.yml",
+    ]
+
+
+def default_companion_path_for_notebook(notebook_path: Path) -> Path | None:
+    """First existing companion among JSON then YAML neighbours, else None."""
+    ap = companion_path_for_notebook(notebook_path)
+    if ap.is_file():
+        return ap
+    for yp in companion_yaml_paths_for_notebook(notebook_path):
+        if yp.is_file():
+            return yp
+    return None
 
 
 def _source_as_text(source: Any) -> str:
@@ -33,10 +59,18 @@ def _normalize_for_compare(agent_text: str) -> str:
 
 
 def load_companion(path: Path) -> dict[str, Any]:
-    raw = path.read_text(encoding="utf-8")
-    data = json.loads(raw)
-    if not isinstance(data, dict):
-        raise ValueError(f"Companion file must be a JSON object: {path}")
+    raw = path.read_text(encoding="utf-8").strip()
+    suf = path.suffix.lower()
+    if suf in (".yaml", ".yml"):
+        parsed = yaml.safe_load(raw or "")
+        if not isinstance(parsed, dict):
+            raise ValueError(f"YAML companion root must be a mapping: {path}")
+        data = parsed
+    else:
+        parsed = json.loads(raw or "{}")
+        if not isinstance(parsed, dict):
+            raise ValueError(f"Companion file must be a JSON object: {path}")
+        data = parsed
     ver = data.get("companion_version", 1)
     if ver != 1:
         raise ValueError(f"Unsupported companion_version {ver} in {path}")
@@ -94,7 +128,7 @@ def validate_companion_against_notebook(
         cmp_src = _normalize_for_compare(src_c)
         if nb_src.strip() != cmp_src.strip():
             raise ValueError(
-                f"Companion source mismatch for cell_id={cid}: reconcile .ipynb and .apynb.",
+                f"Companion source mismatch for cell_id={cid}: reconcile notebook and companion sidecar.",
             )
 
     return {
@@ -120,27 +154,33 @@ def validate_companion_file(
 def write_companion_from_notebook(
     notebook_path: str | Path,
     companion_out: str | Path | None = None,
+    *,
+    fmt: str = "json",
 ) -> Path:
-    """Write companion JSON from code cells in order.
+    """Write companion JSON (**`.apynb`**) or YAML (**`.companion.yaml`**) from ordered code cells.
 
     Persists ``metadata.cell_id`` for any code cell that was missing one.
+    Pass ``fmt="yaml"`` to emit YAML (default basename ``{stem}.companion.yaml`` when ``out`` is omitted).
     """
-    from llm_jupyter.notebook import ensure_cell_ids, indices_of_code_cells, load_notebook, validate_notebook_node
+    from llm_jupyter.notebook import indices_of_code_cells, load_notebook_ensuring_cell_ids, validate_notebook_node
 
     nb_path = Path(notebook_path).expanduser().resolve()
     if not nb_path.is_file():
         raise FileNotFoundError(f"Notebook not found: {nb_path}")
 
-    nb = load_notebook(nb_path)
-    ensure_cell_ids(nb, persist_path=nb_path)
-    nb = load_notebook(nb_path)
+    fm = fmt.lower().strip()
+    if fm not in ("json", "yaml"):
+        raise ValueError(f"Unsupported companion fmt={fmt!r} (expected 'json' or 'yaml').")
+
+    nb, _ = load_notebook_ensuring_cell_ids(nb_path)
     validate_notebook_node(nb)
 
-    out = (
-        Path(companion_out).expanduser().resolve()
-        if companion_out is not None
-        else companion_path_for_notebook(nb_path)
-    )
+    if companion_out is not None:
+        out = Path(companion_out).expanduser().resolve()
+    elif fm == "json":
+        out = companion_path_for_notebook(nb_path)
+    else:
+        out = nb_path.with_name(nb_path.stem + ".companion.yaml")
 
     rows = []
     for i in indices_of_code_cells(nb):
@@ -151,5 +191,9 @@ def write_companion_from_notebook(
         rows.append({"cell_id": str(cid).strip(), "source": _source_as_text(cell.source)})
 
     payload = {"companion_version": 1, "notebook": nb_path.name, "cells": rows}
-    out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if fm == "yaml":
+        out.write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    else:
+        out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return out

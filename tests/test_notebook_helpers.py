@@ -5,7 +5,13 @@ from pathlib import Path
 import nbformat.v4 as nbf
 import pytest
 
-from llm_jupyter.notebook import cell_index_for_id, ensure_cell_ids, indices_of_code_cells, load_notebook
+from llm_jupyter.notebook import (
+    cell_index_for_id,
+    cell_index_for_stable_id,
+    ensure_cell_ids,
+    indices_of_code_cells,
+    load_notebook,
+)
 
 
 def test_ensure_cell_ids_persists(tmp_path: Path):
@@ -21,6 +27,22 @@ def test_ensure_cell_ids_persists(tmp_path: Path):
     cid = nb3.cells[idx[0]].metadata["cell_id"]
     assert isinstance(cid, str)
     assert cell_index_for_id(nb3, cid) == idx[0]
+
+
+def test_ensure_cell_ids_assigns_stable_ids_markdown(tmp_path: Path) -> None:
+    p = tmp_path / "m.ipynb"
+    nb = nbf.new_notebook(cells=[nbf.new_code_cell("1+1"), nbf.new_markdown_cell("# t")])
+    import nbformat as nbfmt
+
+    nbfmt.write(nb, open(p, "w", encoding="utf-8"))
+    nb2 = load_notebook(p)
+    assert ensure_cell_ids(nb2, persist_path=p)
+    nb3 = load_notebook(p)
+    mid = nb3.cells[1].metadata.get("cell_id")
+    assert isinstance(mid, str) and mid
+    assert cell_index_for_stable_id(nb3, str(mid)) == 1
+    with pytest.raises(LookupError, match="not a code cell"):
+        cell_index_for_id(nb3, str(mid))
 
 
 def test_cell_missing_errors(tmp_path: Path):

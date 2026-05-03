@@ -8,16 +8,20 @@ def test_mcp_tool_surface_is_small():
     tools = mcp._tool_manager.list_tools()
     names = {t.name for t in tools}
     assert names == {
-        "run",
-        "kernel_restart",
-        "kernel_interrupt",
-        "kernel_status",
-        "clear_outputs",
-        "notebook_validate",
-        "notebook_outline",
-        "companion_validate",
-        "server_info",
-    }
+            "run",
+            "dry_run",
+            "kernel_restart",
+            "kernel_interrupt",
+            "kernel_status",
+            "clear_outputs",
+            "notebook_validate",
+            "notebook_outline",
+            "notebook_cells_patch",
+            "companion_validate",
+            "cells_apply",
+            "variable_preview",
+            "server_info",
+        }
     for t in tools:
         desc = (t.description or "").strip()
         assert len(desc) < 500, f"{t.name} description too long for MCP ergonomics"

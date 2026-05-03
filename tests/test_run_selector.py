@@ -31,6 +31,58 @@ def test_contradictory_run_modes_raises(tmp_path: Path):
         sess.close()
 
 
+def test_run_lookuperror_includes_resolved_notebook_path(tmp_path: Path):
+    import nbformat as nbfmt
+    import nbformat.v4 as nbf
+
+    from llm_jupyter.session import KernelSession
+
+    p = tmp_path / "pathhint.ipynb"
+    nb = nbf.new_notebook(cells=[nbf.new_code_cell("1")])
+    nbfmt.write(nb, open(p, "w", encoding="utf-8"))
+
+    from llm_jupyter.notebook import ensure_cell_ids, load_notebook
+
+    ensure_cell_ids(load_notebook(p), persist_path=p)
+
+    sess = KernelSession(p, [], "explore")
+    try:
+        with pytest.raises(LookupError, match="resolved notebook"):
+            sess.run(cell_id="00000000-0000-0000-0000-000000000001")
+    finally:
+        sess.close()
+
+
+def test_resolve_run_targets_without_kernel(tmp_path: Path) -> None:
+    import nbformat as nbfmt
+    import nbformat.v4 as nbf
+
+    from llm_jupyter.notebook import ensure_cell_ids, load_notebook
+    from llm_jupyter.session import KernelSession
+
+    p = tmp_path / "plan.ipynb"
+    nb = nbf.new_notebook(
+        cells=[nbf.new_code_cell("1"), nbf.new_markdown_cell("# x"), nbf.new_code_cell("2")],
+    )
+    nbfmt.write(nb, open(p, "w", encoding="utf-8"))
+    ensure_cell_ids(load_notebook(p), persist_path=p)
+    nb2 = load_notebook(p)
+    cid0 = str(nb2.cells[0].metadata["cell_id"])
+
+    sess = KernelSession(p, [], "explore")
+    try:
+        plan = sess.resolve_run_targets(cell_id=cid0)
+        assert plan["status"] == "ok"
+        assert plan["selector_kind"] == "cell"
+        assert plan["execution_cell_indices"] == [0]
+        assert plan["cells_planned_n"] == 1
+        assert plan["cells_planned"][0]["cell_index"] == 0
+        ks = plan["kernel_status_preview"]
+        assert ks["kernel_alive"] is False
+    finally:
+        sess.close()
+
+
 def test_notebook_without_code_cells_allows_no_selector(tmp_path: Path):
     import nbformat as nbfmt
 

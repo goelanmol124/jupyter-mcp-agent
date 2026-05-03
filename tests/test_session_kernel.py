@@ -5,6 +5,7 @@ from pathlib import Path
 import nbformat.v4 as nbf
 import pytest
 
+from llm_jupyter.notebook import ensure_cell_ids, load_notebook
 from llm_jupyter.session import KernelSession
 
 
@@ -80,6 +81,97 @@ def test_kernel_restart_increments_generation(tmp_path: Path):
 
 
 @pytest.mark.kernel
+def test_halt_on_false_still_reports_structured_execution_error(tmp_path: Path):
+    """When allow_errors, nbclient attaches error outputs rather than raising; server must expose them."""
+    nb_path = tmp_path / "halt.ipynb"
+    nb = nbf.new_notebook(
+        cells=[
+            nbf.new_code_cell("works = True"),
+            nbf.new_code_cell("raise ValueError('deliberate')"),
+            nbf.new_code_cell("follow_up = True"),
+        ],
+    )
+    import nbformat as nbfmt
+
+    nbfmt.write(nb, open(nb_path, "w", encoding="utf-8"))
+
+    sess = KernelSession(nb_path, [], "explore")
+    try:
+        out = sess.run(run_all=True, halt_on_error=False)
+        assert out["status"] == "error"
+        assert out["halt_on_error"] is False
+        assert out["execution_error"]["ename"] == "ValueError"
+        assert "deliberate" in out["execution_error"]["evalue"]
+        err_text = "".join(out["stderr_chunks"].values())
+        assert "deliberate" in err_text or "ValueError" in err_text
+
+        streamed = out.get("streams_by_cell_executed") or []
+        assert len(streamed) == 3
+
+        timings = out.get("phase_timings_ms") or {}
+        assert timings.get("kernel_shell_setup_ms", 0) >= 0
+        assert timings.get("payload_assembly_ms", 0) >= 0
+    finally:
+        sess.close()
+
+
+@pytest.mark.kernel
+def test_variable_preview_sees_kernel_state(tmp_path: Path):
+    nb_path = tmp_path / "pv.ipynb"
+    nb = nbf.new_notebook(cells=[nbf.new_code_cell("demo_x = 714\n")])
+    import nbformat as nbfmt
+
+    nbfmt.write(nb, open(nb_path, "w", encoding="utf-8"))
+    ensure_cell_ids(load_notebook(nb_path), persist_path=nb_path)
+    sess = KernelSession(nb_path, [], "explore")
+    try:
+        nb2 = load_notebook(nb_path)
+        cid = str(nb2.cells[0].metadata["cell_id"])
+        sess.run(cell_id=cid)
+        out = sess.variable_preview(names=["demo_x"])
+        assert out["status"] == "ok"
+        assert "714" in out["previews"]["demo_x"]
+        assert "cold_kernel_hint" not in out
+    finally:
+        sess.close()
+
+
+@pytest.mark.kernel
+def test_variable_preview_cold_hint_when_all_undefined(tmp_path: Path):
+    nb_path = tmp_path / "coldhint.ipynb"
+    nb = nbf.new_notebook(cells=[nbf.new_code_cell("# preamble\npass\n")])
+    import nbformat as nbfmt
+
+    nbfmt.write(nb, open(nb_path, "w", encoding="utf-8"))
+    ensure_cell_ids(load_notebook(nb_path), persist_path=nb_path)
+    sess = KernelSession(nb_path, [], "explore")
+    try:
+        out = sess.variable_preview(names=["absent_z"])
+        assert out["status"] == "ok"
+        assert "cold_kernel_hint" in out
+    finally:
+        sess.close()
+
+
+@pytest.mark.kernel
+def test_variable_preview_cold_kernel_marks_missing(tmp_path: Path):
+    nb_path = tmp_path / "cold.ipynb"
+    nb = nbf.new_notebook(cells=[nbf.new_code_cell("# preamble\npass\n")])
+    import nbformat as nbfmt
+
+    nbfmt.write(nb, open(nb_path, "w", encoding="utf-8"))
+    ensure_cell_ids(load_notebook(nb_path), persist_path=nb_path)
+    sess = KernelSession(nb_path, [], "explore")
+    try:
+        out = sess.variable_preview(names=["absent_name"])
+        assert out["status"] == "ok"
+        assert out["previews"]["absent_name"] == "<not defined>"
+        assert "cold_kernel_hint" in out
+    finally:
+        sess.close()
+
+
+@pytest.mark.kernel
 def test_two_notebooks_have_independent_kernels(tmp_path: Path):
     import nbformat as nbfmt
 
@@ -115,5 +207,41 @@ def test_two_notebooks_have_independent_kernels(tmp_path: Path):
         assert "nb_b" not in text
         assert sess.kernel_status(notebook_path=str(a_path))["notebook_kernel_active"] is True
         assert sess.kernel_status(notebook_path=str(b_path))["notebook_kernel_active"] is True
+    finally:
+        sess.close()
+
+
+@pytest.mark.kernel
+def test_run_compact_assistant_quick_drops_pedagogy_keys(tmp_path: Path):
+    nb_path = tmp_path / "compact.ipynb"
+    nb = nbf.new_notebook(cells=[nbf.new_code_cell("x = 1")])
+    import nbformat as nbfmt
+
+    nbfmt.write(nb, open(nb_path, "w", encoding="utf-8"))
+    ensure_cell_ids(load_notebook(nb_path), persist_path=nb_path)
+    sess = KernelSession(nb_path, [], "explore")
+    try:
+        out = sess.run(run_all=True, compact_assistant_quick=True)
+        aq = out["assistant_quick"]
+        assert "halt_on_false_means_continue_not_hide_errors" not in aq
+        assert "kernel_wall_clock_hint" not in aq
+    finally:
+        sess.close()
+
+
+@pytest.mark.kernel
+def test_run_compact_via_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_JUPYTER_COMPACT_ASSISTANT_QUICK", "1")
+    nb_path = tmp_path / "compact_env.ipynb"
+    nb = nbf.new_notebook(cells=[nbf.new_code_cell("y = 2")])
+    import nbformat as nbfmt
+
+    nbfmt.write(nb, open(nb_path, "w", encoding="utf-8"))
+    ensure_cell_ids(load_notebook(nb_path), persist_path=nb_path)
+    sess = KernelSession(nb_path, [], "explore")
+    try:
+        out = sess.run(run_all=True)
+        aq = out["assistant_quick"]
+        assert "halt_on_false_means_continue_not_hide_errors" not in aq
     finally:
         sess.close()

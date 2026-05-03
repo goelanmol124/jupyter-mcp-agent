@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-jupyter"
-version = "0.1.2"
+version = "0.2.4"
 description = "MCP server for ipykernel Jupyter notebooks (.ipynb) with truthful run metadata"
 readme = "README.md"
 license = "MIT"
@@ -28,6 +28,7 @@ dependencies = [
     "nbformat>=5.10",
     "nbclient>=0.10",
     "Pillow>=10.0",
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]

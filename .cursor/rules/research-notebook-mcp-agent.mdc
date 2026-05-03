@@ -1,5 +1,5 @@
 ---
-description: Notebook R&D with Research Notebook MCP — inspect data, minimal production-style code
+description: Notebook R&D with Research Notebook MCP — inspect data, exploratory code shape, liberal in-notebook commentary (hypotheses, results of prior runs)
 alwaysApply: true
 ---
 
@@ -8,13 +8,10 @@ alwaysApply: true
 This repo targets **notebook-style research** with an LLM. When using or implementing the MCP server, favour **understanding over polish**.
 
 - **Look at real data**: samples, plots on disk, **stderr** alongside stdout. Metrics alone are not enough.
-- Trace **data flow** and **middle states**—not only final outputs. Use MCP **variable previews** when something is ambiguous.
+- Trace **data flow** and **middle states**—not only final outputs. Prefer **`notebook_outline`** (cell ids/sources), **`run`** payloads (streams, previews, errors), and **`variable_preview`** (capped **`repr`** of plain names in **`globals()`**—no dotted lookups) plus disk reads—not chat-only guesses.
 - **Debug** with kernel truth: respect **stale-output** hints and **`kernel_generation`** after restarts; rerun chains when diagnosing.
-- **Keep cell code small**: few functions, little try/except, light typing, no gratuitous production patterns. Let errors surface while exploring.
-- Prefer MCP **cell tools** or **companion file** over editing raw `.ipynb` JSON.
+- Use **`dry_run`** to resolve the same selectors as **`run`** without executing when ids or companion alignment are unclear; call **`notebook_outline`** before **`run(..., cell_id=…)`** when ids are unknown.
+- **Keep cell logic compact**—few toy abstractions—not comment-free prose. **Comment and narrate generously** in **`#`** lines or Markdown cells: hypotheses, why this step follows the last **`run`**, what surprised you (`stderr`/plots), forks you tried—R&D notebooks should read like a lab log when chat history is gone.
+- Prefer **`notebook_cells_patch`** / **`cells_apply`** (structured edits by **`metadata.cell_id`**) **or validated companion mirrors** (**`.apynb`** / **`export-apynb --format yaml`**) over hand-editing raw `.ipynb` JSON.
 
-## MCP visibility (automated/agent chats)
-
-**.cursor/mcp.json** declares **`llm-jupyter`** under **`mcpServers`**. Some agent/tool sessions register only **`cursor-ide-browser`**; enable **llm-jupyter** in Cursor’s MCP integrations and reload ([Cursor MCP help](https://cursor.com/help/customization/mcp)). A successful **`server_info`** response is proof the notebook MCP proc is live for that session—not just that the JSON file exists on disk.
-
-Detailed workflow: Cursor skill **`research-notebook-mcp-workflow`** — file `.cursor/skills/research-notebook-mcp-workflow/SKILL.md`.
+Detailed workflow & tool inventory: Cursor skill **`research-notebook-mcp-workflow`** — `.cursor/skills/research-notebook-mcp-workflow/SKILL.md` (**`/research-notebook-mcp-workflow`**).

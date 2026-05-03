@@ -6,7 +6,14 @@ from pathlib import Path
 import nbformat.v4 as nbf
 import pytest
 
-from llm_jupyter.companion import validate_companion_file, write_companion_from_notebook
+import yaml
+
+from llm_jupyter.companion import (
+    companion_path_for_notebook,
+    default_companion_path_for_notebook,
+    validate_companion_file,
+    write_companion_from_notebook,
+)
 from llm_jupyter.notebook import load_notebook, validate_notebook_node
 from llm_jupyter.session import KernelSession
 
@@ -16,6 +23,33 @@ def _write_nb(path: Path, cells: list) -> None:
 
     nb = nbf.new_notebook(cells=cells)
     nbfmt.write(nb, open(path, "w", encoding="utf-8"))
+
+
+def test_write_yaml_companion_roundtrip(tmp_path: Path):
+    nb_path = tmp_path / "y.ipynb"
+    c1 = nbf.new_code_cell("k = True\n")
+    _write_nb(nb_path, [c1])
+    ypath = write_companion_from_notebook(nb_path, fmt="yaml")
+    assert ypath.name.endswith(".companion.yaml")
+    nb = load_notebook(nb_path)
+    vr = validate_companion_file(notebook_path=nb_path, notebook=nb, companion_file=ypath)
+    assert vr["ok"] is True
+
+
+def test_default_companion_prefers_apynb_over_yaml_when_both(tmp_path: Path):
+    nb_path = tmp_path / "both.ipynb"
+    c1 = nbf.new_code_cell("z = 9\n")
+    _write_nb(nb_path, [c1])
+    write_companion_from_notebook(nb_path, fmt="json")
+    yaml_path = nb_path.with_name(nb_path.stem + ".companion.yaml")
+    nb = load_notebook(nb_path)
+    cid = str(nb.cells[0]["metadata"]["cell_id"])
+    payload = {"companion_version": 1, "notebook": "both.ipynb", "cells": [{"cell_id": cid, "source": "z = 9\n"}]}
+    yaml_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    cand = default_companion_path_for_notebook(nb_path)
+    assert cand is not None
+    assert cand == companion_path_for_notebook(nb_path)
 
 
 def test_companion_ok_when_matches(tmp_path: Path):
