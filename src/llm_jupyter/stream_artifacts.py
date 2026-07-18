@@ -113,7 +113,7 @@ def read_run_stream_slice(
     byte_offset: int = 0,
     max_bytes: int | None = None,
 ) -> dict[str, Any]:
-    """Read a capped byte slice from ``stdout.txt`` or ``stderr.txt`` for ``run_stream_read``."""
+    """Read a capped byte slice from ``stdout.txt`` or ``stderr.txt`` under evidence runs."""
 
     nb = notebook_path.expanduser().resolve()
     rid = str(run_id).strip()

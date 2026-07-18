@@ -1,0 +1,30 @@
+{
+  "companion_version": 1,
+  "notebook": "ab_rnd_changepoint.ipynb",
+  "cells": [
+    {
+      "cell_id": "f6f34a18-ea19-42f7-8ece-50e997a160d7",
+      "source": "# setup\nimport os\nimport numpy as np\nimport matplotlib.pyplot as plt\n"
+    },
+    {
+      "cell_id": "a5f4c1a9-a7e3-47ae-8723-ac324e2dbf8e",
+      "source": "def series(tau, n=400, sigma=0.4, rng_seed=4242):\n    rng = np.random.default_rng(rng_seed)\n    y = np.zeros(n)\n    mu0, mu1 = 0.0, 1.5\n    y[:tau] = mu0 + rng.normal(0, sigma, tau)\n    y[tau:] = mu1 + rng.normal(0, sigma, n - tau)\n    return y\ntau_A, tau_B = 200, 45\nyA, yB = series(tau_A), series(tau_B)\nprint('A', yA.shape, yA[:3], yA[199:202])\nprint('B', yB.shape, yB[43:47])\n"
+    },
+    {
+      "cell_id": "9cb6e64d-ad86-4cbe-b9ed-3a8509c46e5c",
+      "source": "# estimators: SSE grid on interior window; |CUSUM| argmax (exclude edges)\nn = 400\n\n\ndef tau_grid_bounds(tau_star, nobs):\n    lo = max(1, tau_star - 40)\n    hi = min(nobs - 1, tau_star + 60)\n    return lo, hi\n\n\ndef sse_profile(y, lo, hi):\n    taus = np.arange(lo, hi + 1, dtype=int)\n    prof = np.empty_like(taus, dtype=float)\n    for j, t in enumerate(taus):\n        m0 = y[:t].mean()\n        m1 = y[t:].mean()\n        prof[j] = ((y[:t] - m0) ** 2).sum() + ((y[t:] - m1) ** 2).sum()\n    return taus, prof\n\n\ndef tau_hat_grid(y, tau_star):\n    lo, hi = tau_grid_bounds(tau_star, len(y))\n    taus, prof = sse_profile(y, lo, hi)\n    return int(taus[np.argmin(prof)])\n\n\ndef tau_hat_cusum(y, edge=15):\n    mu = y.mean()\n    c = np.cumsum(y - mu)\n    s, e = edge, len(y) - edge\n    idx = s + np.argmax(np.abs(c[s:e]))\n    return int(idx)\n\n\ndef abs_err(y, tau_star, method):\n    if method == 'grid':\n        th = tau_hat_grid(y, tau_star)\n    else:\n        th = tau_hat_cusum(y)\n    return abs(th - tau_star), th\n"
+    },
+    {
+      "cell_id": "e5a83788-4e65-462e-84e2-003245e9197e",
+      "source": "# raw series + annotations; save combined raw plot (prefix from MCP env or fallback)\nimport os\n\nFIG_PREFIX = os.environ.get('LLM_NB_ART_PREFIX') or 'ab_rnd_cp_noseed_'\ndemos_dir = 'demos'\n\nfig, ax = plt.subplots(2, 1, figsize=(10, 4.5), sharex=True)\nfor ax_i, (yy, ts, lab) in zip(\n    ax,\n    [\n        (yA, tau_A, 'A center \u03c4*=200'),\n        (yB, tau_B, 'B edge \u03c4*=45'),\n    ],\n):\n    ax_i.plot(yy, lw=0.8, color='0.2')\n    ax_i.axvline(ts - 0.5, color='C3', ls='--', lw=1, label=f'true \u03c4={ts}')\n    ax_i.set_ylabel('y')\n    ax_i.set_title(lab)\n    ax_i.legend(loc='upper right', fontsize=8)\nax[1].set_xlabel('t')\nfig.tight_layout()\nraw_path = os.path.join(demos_dir, f'{FIG_PREFIX}_raw_AB_twopanel.png')\nfig.savefig(raw_path, dpi=150)\nplt.close()\nprint('saved', raw_path)\n"
+    },
+    {
+      "cell_id": "14b7c5a4-7aba-4766-b00e-90b27e82ac79",
+      "source": "# error table both scenarios \u00d7 both methods\nrows = []\nfor tag, y, ts in [('A', yA, tau_A), ('B', yB, tau_B)]:\n    for method in ('grid', 'cusum'):\n        err, th = abs_err(y, ts, method)\n        rows.append((tag, ts, method, th, err))\nprint('scenario true_tau method tau_hat abs_err')\nfor r in rows:\n    print('%s %s %s %s %s' % r)\n"
+    },
+    {
+      "cell_id": "c16ad751-92e7-4631-997f-18dd79652223",
+      "source": "# diagnostic: SSE curves + |CUSUM| for both (second figure)\nimport os\n\nFIG_PREFIX = os.environ.get('LLM_NB_ART_PREFIX') or 'ab_rnd_cp_noseed_'\ndemos_dir = 'demos'\n\nfig, axes = plt.subplots(2, 2, figsize=(10, 5))\nfor row, (y, ts, name) in enumerate([(yA, tau_A, 'A'), (yB, tau_B, 'B')]):\n    lo, hi = tau_grid_bounds(ts, len(y))\n    taus, prof = sse_profile(y, lo, hi)\n    axes[row, 0].plot(taus, prof, lw=1)\n    axes[row, 0].axvline(ts, color='C3', ls='--', lw=1)\n    thg = tau_hat_grid(y, ts)\n    axes[row, 0].axvline(thg, color='C0', ls=':', lw=1)\n    axes[row, 0].set_title(f'{name} SSE segment')\n    axes[row, 0].set_xlabel('candidate \u03c4')\n    mu = y.mean()\n    c = np.cumsum(y - mu)\n    axes[row, 1].plot(np.arange(len(y)), np.abs(c), lw=0.8)\n    axes[row, 1].axvline(ts, color='C3', ls='--', lw=1)\n    thc = tau_hat_cusum(y)\n    axes[row, 1].axvline(thc, color='C2', ls=':', lw=1)\n    axes[row, 1].set_title(f'{name} |CUSUM|')\n    axes[row, 1].set_xlabel('t')\nfig.tight_layout()\ndiag_path = os.path.join(demos_dir, f'{FIG_PREFIX}_diag_sse_cusum.png')\nfig.savefig(diag_path, dpi=150)\nplt.close()\nprint('saved', diag_path)\n"
+    }
+  ]
+}

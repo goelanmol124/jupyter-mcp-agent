@@ -1,0 +1,9 @@
+Optimizer / initial-guess sensitivity (scipy.optimize.curve_fit, Levenberg–Marquardt):
+
+- `default` p0=(1.0, 1.0, 0.5, 0.1) → fit A1=0.9128, k1=0.6960, A2=0.3382, k2=0.1451
+- `swapped_decays` p0=(0.5, 0.15, 1.0, 0.7) → fit A1=0.3382, k1=0.1451, A2=0.9128, k2=0.6960
+- `tiny_A2` p0=(1.0, 1.0, 0.01, 0.05) → fit A1=0.3382, k1=0.1451, A2=0.9128, k2=0.6960
+- `large_k1` p0=(0.5, 3.0, 0.5, 0.2) → fit A1=0.3382, k1=0.1451, A2=0.9128, k2=0.6960
+- `far` p0=(2.0, 0.05, -0.5, 1.0) → fit A1=0.3382, k1=0.1451, A2=0.9128, k2=0.6960
+
+Biexponential fits are only locally identifiable from a single curve: swapping (A1,k1) with (A2,k2) gives the same function if both exponentials appear. Very bad starts can hit bounds, negative amplitudes, or covariance blow-ups; in practice, multiple random restarts or bounded parameters help.

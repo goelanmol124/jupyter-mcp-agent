@@ -30,7 +30,9 @@ def test_run_all_writes_output_and_manifest(tmp_path: Path):
         line0 = mf.read_text(encoding="utf-8").strip().splitlines()[0]
         import json
 
-        assert json.loads(line0)["run_id"] == out["run_id"]
+        row0 = json.loads(line0)
+        assert row0["run_id"] == out["run_id"]
+        assert "sources_concat_sha256_prefix" in row0 and len(str(row0["sources_concat_sha256_prefix"])) == 16
     finally:
         sess.close()
 
@@ -117,7 +119,25 @@ def test_halt_on_false_still_reports_structured_execution_error(tmp_path: Path):
 
 
 @pytest.mark.kernel
-def test_variable_preview_sees_kernel_state(tmp_path: Path):
+def test_record_snapshot_env_writes_notebook_copy(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("LLM_JUPYTER_RECORD_NOTEBOOK_SNAPSHOT", "1")
+    nb_path = tmp_path / "snap.ipynb"
+    nb = nbf.new_notebook(cells=[nbf.new_code_cell("y = 99\n")])
+    import nbformat as nbfmt
+
+    nbfmt.write(nb, open(nb_path, "w", encoding="utf-8"))
+    sess = KernelSession(nb_path, [], "explore")
+    try:
+        out = sess.run(run_all=True, mode="record")
+        assert out["status"] == "ok"
+        rid = out["run_id"]
+        copied = nb_path.parent / ".llm_jupyter" / "notebook_snapshots" / rid / "notebook.ipynb"
+        assert copied.is_file()
+        assert "y = 99" in copied.read_text(encoding="utf-8")
+    finally:
+        sess.close()
+
+
     nb_path = tmp_path / "pv.ipynb"
     nb = nbf.new_notebook(cells=[nbf.new_code_cell("demo_x = 714\n")])
     import nbformat as nbfmt

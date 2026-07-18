@@ -244,7 +244,7 @@ def scenario_variable_preview_batch(nb: Path, sess_for: Callable[[Path], Any]) -
         sess.close()
 
 
-def scenario_dry_run_hot_path(nb: Path, sess_for: Callable[[Path], Any], n: int) -> None:
+def scenario_execution_plan_hot_path(nb: Path, sess_for: Callable[[Path], Any], n: int) -> None:
     _write_nb(nb, [nbf.new_code_cell("1+1")])
     from llm_jupyter.notebook import ensure_cell_ids, load_notebook
 
@@ -253,11 +253,11 @@ def scenario_dry_run_hot_path(nb: Path, sess_for: Callable[[Path], Any], n: int)
     try:
         t0 = time.perf_counter()
         for _ in range(n):
-            sess.resolve_run_targets(notebook_path=str(nb), run_all=True)
+            sess.notebook_execution_plan(notebook_path=str(nb), run_all=True)
         wall = int((time.perf_counter() - t0) * 1000)
         per = wall / max(n, 1)
         print(
-            f"{f'12_resolve_run_targets_x{n}_total':42} wall_ms={wall:6d}  (~{per:.2f} ms/call)"
+            f"{f'12_notebook_execution_plan_x{n}_total':42} wall_ms={wall:6d}  (~{per:.2f} ms/call)"
             " disk read + validate + companion gate (+ notebook lock overhead if contended)"
         )
     finally:
@@ -287,25 +287,20 @@ def scenario_cells_apply(nb: Path, sess_for: Callable[[Path], Any]) -> None:
         sess.close()
 
 
-def scenario_outline_sources(root: Path, default_nb: Path) -> None:
+def scenario_notebook_validate_persist_large(root: Path, default_nb: Path) -> None:
     from llm_jupyter.server import build_mcp
 
-    outline_nb = root / "outline.ipynb"
+    big_nb = root / "validate_big.ipynb"
     big = "\n".join(f"# section {i}\nprint({i})" for i in range(200))
-    _write_nb(outline_nb, [nbf.new_code_cell(big)])
+    _write_nb(big_nb, [nbf.new_code_cell(big)])
     mcp = build_mcp(default_nb, [root], "explore")
     try:
         tm = mcp._tool_manager
 
         async def call() -> dict[str, Any]:
             return await tm.call_tool(
-                "notebook_outline",
-                {
-                    "notebook_path": str(outline_nb),
-                    "include_sources": True,
-                    "max_cells_with_sources": 200,
-                    "max_total_source_chars": 900_000,
-                },
+                "notebook_validate",
+                {"notebook_path": str(big_nb), "persist_cell_ids": True},
                 context=None,
                 convert_result=False,
             )
@@ -314,8 +309,8 @@ def scenario_outline_sources(root: Path, default_nb: Path) -> None:
         out = asyncio.run(call())
         wall = int((time.perf_counter() - t0) * 1000)
         print(
-            f"{'14_notebook_outline_include_sources':42} wall_ms={wall:6d}  "
-            f"cells_n={len(out.get('cells') or [])} source_chars_emitted={out.get('source_chars_emitted')}"
+            f"{'14_notebook_validate_persist_large':42} wall_ms={wall:6d}  "
+            f"cell_ids_assigned_written={out.get('cell_ids_assigned_written')}"
         )
     finally:
         ks = getattr(mcp, "_llm_kernel_session", None)
@@ -331,7 +326,7 @@ def main() -> None:
     ap.add_argument(
         "--cprofile",
         metavar="TAG",
-        help="profile one heavy scenario (mega_stdout,many,outline)",
+        help="profile one heavy scenario (mega_stdout,many,validate_big)",
     )
     ap.add_argument("--mega-chars", type=int, default=120_000, help="warm-kernel mega stdout stress size")
     ap.add_argument("--top", type=int, default=30)
@@ -358,8 +353,8 @@ def main() -> None:
         def run_wrapped() -> None:
             if "many" in tag:
                 scenario_many_cells(root / "cprof_many.ipynb", sess_for)
-            elif "outline" in tag:
-                scenario_outline_sources(root, base_nb)
+            elif "validate_big" in tag or "validate" in tag:
+                scenario_notebook_validate_persist_large(root, base_nb)
             else:
                 scenario_mega_stdout(root / "cprof_mega.ipynb", sess_for, min(args.mega_chars, 250_000))
 
@@ -383,9 +378,9 @@ def main() -> None:
     scenario_matplotlib(root / "mpl.ipynb", sess_for, root)
     scenario_lru_eviction(root, KernelSession)
     scenario_variable_preview_batch(root / "vp.ipynb", sess_for)
-    scenario_dry_run_hot_path(root / "dry.ipynb", sess_for, 80)
+    scenario_execution_plan_hot_path(root / "dry.ipynb", sess_for, 80)
     scenario_cells_apply(root / "apply.ipynb", sess_for)
-    scenario_outline_sources(root, base_nb)
+    scenario_notebook_validate_persist_large(root, base_nb)
 
 
 if __name__ == "__main__":

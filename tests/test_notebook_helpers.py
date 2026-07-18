@@ -11,8 +11,13 @@ from llm_jupyter.notebook import (
     ensure_cell_ids,
     indices_of_code_cells,
     load_notebook,
+    sources_concat_sha256_prefix,
 )
 
+def test_sources_concat_sha256_prefix_is_order_sensitive() -> None:
+    a = nbf.new_notebook(cells=[nbf.new_code_cell("a"), nbf.new_code_cell("b")])
+    b = nbf.new_notebook(cells=[nbf.new_code_cell("b"), nbf.new_code_cell("a")])
+    assert sources_concat_sha256_prefix(a) != sources_concat_sha256_prefix(b)
 
 def test_ensure_cell_ids_persists(tmp_path: Path):
     p = tmp_path / "x.ipynb"

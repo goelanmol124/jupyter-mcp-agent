@@ -1,0 +1,1 @@
+The single-exponential fit absorbs part of the slow decay into the fast mode, so residuals are mostly negative at early times and positive at late times (a curved pattern in y vs t is folded into amplitude/decay rate). The residual histogram departs from Gaussian: longer tails and skew from structured error.

@@ -99,3 +99,29 @@ def test_notebook_without_code_cells_allows_no_selector(tmp_path: Path):
         assert "run_id" in out and len(out["run_id"]) >= 8
     finally:
         sess.close()
+
+
+def test_bulk_exclude_skips_probe_in_run_all_plan(tmp_path: Path) -> None:
+    import nbformat as nbfmt
+
+    from llm_jupyter.notebook import ensure_cell_ids, load_notebook
+    from llm_jupyter.session import KernelSession
+
+    probe = nbf.new_code_cell("probe")
+    probe.metadata["llm_jupyter"] = {"exclude_from_bulk": True}
+    p = tmp_path / "bulk.ipynb"
+    nb = nbf.new_notebook(
+        cells=[probe, nbf.new_markdown_cell("# m"), nbf.new_code_cell("x = 2")],
+    )
+    nbfmt.write(nb, open(p, "w", encoding="utf-8"))
+    ensure_cell_ids(load_notebook(p), persist_path=p)
+
+    sess = KernelSession(p, [], "explore")
+    try:
+        plan = sess.notebook_execution_plan(run_all=True)
+        assert plan["execution_cell_indices"] == [2]
+        cid0 = str(load_notebook(p).cells[0].metadata["cell_id"])
+        one = sess.notebook_execution_plan(cell_id=cid0)
+        assert one["execution_cell_indices"] == [0]
+    finally:
+        sess.close()

@@ -25,6 +25,7 @@ from llm_jupyter.session import (
     NotebookConcurrentBusy,
     notebook_exclusive_lock_timeout_seconds,
 )
+from llm_jupyter.stamp import notebook_file_stamp
 
 
 def _tool_exception_traceback_text(exc: BaseException) -> str:
@@ -49,16 +50,6 @@ def _kernel_tool_envelope(tool_result: dict[str, object]) -> dict[str, object]:
 _CURSOR_MCP_REGISTRY_KEY = "llm-jupyter"
 
 PROCESS_SESSION_ID = str(_uuid.uuid4())
-
-# notebook_outline guardrails (echoed as outline_caps_requested vs outline_caps_effective).
-_OUTLINE_PREVIEW_CHARS_FLOOR = 48
-_OUTLINE_PREVIEW_CHARS_CEIL = 2000
-_OUTLINE_SOURCE_PER_CELL_MIN = 200
-_OUTLINE_SOURCE_PER_CELL_CEIL = 80_000
-_OUTLINE_MAX_CELLS_WITH_SOURCES_CEIL = 512
-_OUTLINE_TOTAL_SOURCES_MIN_FLOOR = 4096
-_OUTLINE_TOTAL_SOURCES_CEIL = 512_000
-
 
 def _notebook_arg(notebook_default: Path | None, notebook_path: str | None) -> Path:
     raw = notebook_path or (str(notebook_default) if notebook_default else "")
@@ -117,62 +108,20 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
     mcp = FastMCP(
         name="llm-jupyter",
         instructions=(
-            "llm-jupyter: notebook-keyed kernels (multiple .ipynb in one MCP process). "
-            "Each notebook_path gets its own ipykernel; pass the same notebook_path on run and kernel_* for that artefact. "
-            "Prefer server_info (no kernel) when sanity-checking version/cwd/serve -n wiring in a new session; "
-            "it also lists tool_names from this process—prefer that over guessing tool sets from prose. "
-            "This repo's .cursor/mcp.json registers the server under mcpServers key \"llm-jupyter\". "
-            "kernel_restart / kernel_interrupt / kernel_status require notebook_path unless serve was started with -n "
-            "(then omit for the default). Relative paths resolve vs server cwd. "
-            "kernel_status: kernel_alive reports subprocess liveness; notebook_kernel_active means a pooled kernel handle "
-            "exists for that path (see field_hints on replies). "
-            "Call notebook_outline before run(..., cell_id=...) when you need cell ids. "
-            "halt_on_error=false asks nbclient to keep executing yet failures still arrive as status:error, "
-            "execution_error, traceback-bearing stderr payloads, kernel_errors_truncated—not silent ok. "
-            "kernel_runtime_ms spans run() through the assembled run reply dict (excluding manifest append and MCP JSON encoding); "
-            "phase_timings_ms.manifest_append_wall_ms times manifest.jsonl append only. "
-            "post_execute_through_chunks_ms rolls up persistence + previews + building stdout/stderr chunk maps for the reply; "
-            "notebook_save_after_execute_ms isolates nbformat notebook save (large cell outputs ⇒ slow writes); "
-            "streams_previews_prepare_ms covers preview extraction and stream join/chunk/summary. "
-            "Tool replies include llm_jupyter_version; if it disagrees with the repo you are editing, "
-            "the MCP Python env is probably not loading workspace src (see mcp.json PYTHONPATH). "
-            "On failures, status:error payloads include \"tool\" (which handler failed), tool_error, traceback, "
-            "exc_type/exc_message (stable fields for agents, including kernel_* path/permission errors). "
-            "Notebook-scoped tools serialize per notebook path so parallel MCP calls for the **same file** queue "
-            "instead of overlapping kernels/notebook saves; notebook_exclusive_contended errors mean a clash or timed wait—"
-            "tune LLM_JUPYTER_NOTEBOOK_LOCK_TIMEOUT_SEC (default 900s wait; empty / inf waits forever). "
-            "kernel_generation and in-RAM kernel handles reset when the MCP stdio process restarts—server_info exposes "
-            "process_session_id (UUID created at process start—stable for that stdio MCP child) besides process_pid. "
-            "kernel_ping resolves notebook_path like kernel_* without parsing the .ipynb JSON; use it before heavy tools. "
-            "notebook_execution_plan returns code_cell_indices (+ optional companion) even with no selector; pass one "
-            "selector to mirror dry_run / run cells_planned semantics. "
-            "run(...) persist_stream_outputs=external_only strips stream outputs into .llm_jupyter/runs/<run_id>/ artifacts "
-            "when combined stdout+stderr exceeds LLM_JUPYTER_MCP_STREAM_CHAR_BUDGET (see stream_delivery, stream_artifacts, "
-            "run_stream_read for base64 artifact slices capped by LLM_JUPYTER_RUN_STREAM_READ_MAX_BYTES). "
-            "LLM_JUPYTER_VERBOSITY_COMPACT=1 hides kernel_* field_hints and long assistant_quick notes (paired with COMPACT_* envs—see SKILL). "
-            "Stream payloads: streams_by_cell_executed is authoritative per executed code cell; stream_summary rolls up "
-            "totals; stdout_chunks/stderr_chunks slice the concatenation of cell stdouts/stderrs (keys are chunk indices, "
-            "not cell ids). "
-            "run(..., strip_ansi_streams=true) or env LLM_JUPYTER_STRIP_ANSI_STREAMS=1 strips ANSI escapes from "
-            "captured stdout/stderr (and per-cell stream tails) for readability. "
-            "dry_run resolves the same selectors as run against the saved notebook without executing or starting a kernel; "
-            "use it to confirm notebook_path + cell_id/run_all/run_until match before an expensive run. "
-            "server_info includes notebook_kernel_pool_paths_resolved (warm .ipynb kernel slots, MRU last); "
-            "LLM_JUPYTER_MAX_NOTEBOOK_KERNELS caps the pool and evicts LRU. "
-            "Huge stdout/stderr mainly inflates notebook_execute_loop_ms (Jupyter stream IPC), not only JSON payload assembly. "
-            "record mode hashes a fixed scientific stack whitelist (see changelog); env LLM_JUPYTER_RECORD_ENV_SNAPSHOT_CACHE_SEC "
-            "may reuse that snapshot briefly—see env_snapshot_cache_* fields on record python_env_snapshot / assistant_quick "
-            "(git_commit may be null if not a git checkout or wrong cwd for rev-parse). "
-            "Heavy runs (large streams_by_cell_executed, previews, chunked stdout/stderr) can stress MCP clients—use "
-            "compact_assistant_quick / env LLM_JUPYTER_COMPACT_ASSISTANT_QUICK for a slimmer assistant_quick, and anchor "
-            "work via run_id plus `python -m llm_jupyter manifest-tail <notebook.ipynb>` (no silent truncation of failures: "
-            "errors stay status:error with execution_error / streams). "
-            "notebook_outline(include_sources=true, ...) returns capped full sources per cell — see response limits. "
-            "notebook_outline defaults persist_cell_ids=false (read-mostly); pass persist_cell_ids=true to assign "
-            "metadata.cell_id to code/markdown/raw cells missing one. notebook_cells_patch runs ordered ops "
-            "insert|delete|move|set_source in one save (returns cells_summary); cells_apply is code-only set_source shorthand—"
-            "use notebook_cells_patch for markdown/raw sources or structural edits. "
-            "notebook_outline echoes outline_caps_requested vs outline_caps_effective with guardrail floors agent-truth caps."
+            "llm-jupyter MCP: pooled ipykernel per notebook_path; reuse the same path on run and kernel_*.\n\n"
+            "- server_info lists tool_names and process_session_id (authoritative).\n"
+            "- notebook_execution_plan with no selectors returns structural_probe; pass exactly one of cell_id, "
+            "run_all=true, or run_until_cell_id to preview the same indices run would execute.\n"
+            "- notebook_validate persists metadata.cell_ids when persist_cell_ids=true.\n"
+            "- Companion mirrors (.apynb) are gated on run and execution_plan companion_strict/discovered paths.\n"
+            "- Stream spill to .llm_jupyter/runs/<run_id>/ when persist_stream_outputs=external_only and large; "
+            "read slices with read_run_stream_slice from stream_artifacts (filesystem).\n"
+            "- halt_on_error=false still reports per-cell failures; statuses and streams explain partial runs.\n"
+            "- Notebook locks: parallel same-path calls queue—notebook_exclusive_* fields on clashes.\n"
+            "- Kernel pool LRU cap LLM_JUPYTER_MAX_NOTEBOOK_KERNELS (≤0 malformed ⇒ 32 default).\n"
+            "- Structural edits notebook_cells_patch; cells_apply wraps code-only set_source.\n"
+            "- record manifests add sources_concat_sha256_prefix; optional LLM_JUPYTER_RECORD_NOTEBOOK_SNAPSHOT copies notebook post-save.\n"
+            "- Cells with metadata.llm_jupyter.exclude_from_bulk skip bulk run_all/run_until (not explicit cell_id runs).\n"
         ),
     )
     sess = KernelSession(notebook_default, roots, default_mode)
@@ -228,35 +177,6 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         except Exception as e:
             return _mcp_tool_error("run", e)
 
-    @mcp.tool(name="dry_run")
-    def dry_run(
-        notebook_path: str | None = None,
-        cell_id: str | None = None,
-        run_all: bool = False,
-        run_until_cell_id: str | None = None,
-        validate_first: bool = True,
-        companion_path: str | None = None,
-        companion_strict: bool = False,
-    ) -> dict[str, object]:
-        """Resolve the same run selector as run against the saved notebook—no kernel start or execute."""
-        try:
-            nb_path = _notebook_arg(notebook_default, notebook_path)
-            sess.check_allowed_notebook(nb_path)
-            with sess.notebook_exclusive(nb_path):
-                return sess.resolve_run_targets(
-                    notebook_path=notebook_path,
-                    cell_id=cell_id,
-                    run_all=run_all,
-                    run_until_cell_id=run_until_cell_id,
-                    validate_first=validate_first,
-                    companion_path=companion_path,
-                    companion_strict=companion_strict,
-                )
-        except NotebookConcurrentBusy as e:
-            return _notebook_exclusive_busy("dry_run", e)
-        except Exception as e:
-            return _mcp_tool_error("dry_run", e)
-
     @mcp.tool(name="notebook_execution_plan")
     def notebook_execution_plan(
         notebook_path: str | None = None,
@@ -267,7 +187,7 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         companion_path: str | None = None,
         companion_strict: bool = False,
     ) -> dict[str, object]:
-        """Structural map + companion without kernel; selectors optional unlike dry_run (structural_probe if omitted)."""
+        """Companion + structural notebook map without kernel (structural_probe if no selectors)."""
         try:
             nb_path = _notebook_arg(notebook_default, notebook_path)
             sess.check_allowed_notebook(nb_path)
@@ -328,18 +248,7 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         except Exception as e:
             return _mcp_tool_error("kernel_status", e)
 
-    @mcp.tool(name="kernel_ping")
-    def kernel_ping(notebook_path: str | None = None) -> dict[str, object]:
-        """Resolve path like kernel_* and report pooled-kernel liveness without loading the .ipynb."""
-        try:
-            path = sess.notebook_path_for_kernel_tool(notebook_path)
-            with sess.notebook_exclusive(path):
-                body = sess.kernel_ping(notebook_path=notebook_path)
-                return _kernel_tool_envelope(dict(body))
-        except NotebookConcurrentBusy as e:
-            return _notebook_exclusive_busy("kernel_ping", e)
-        except Exception as e:
-            return _mcp_tool_error("kernel_ping", e)
+
 
     @mcp.tool(name="clear_outputs")
     def clear_outputs(
@@ -377,186 +286,34 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
             return _mcp_tool_error("clear_outputs", e)
 
     @mcp.tool(name="notebook_validate")
-    def notebook_validate(notebook_path: str | None = None) -> dict[str, object]:
-        """Structural nbformat-only validation (cheap; no execution).
-        Keep for explicit ``validate`` calls; on the hot execution path prefer ``run(..., validate_first=true)``."""
+    def notebook_validate(
+        notebook_path: str | None = None,
+        persist_cell_ids: bool = False,
+    ) -> dict[str, object]:
+        """Structural nbformat validation; optional persist of metadata.cell_id for every cell."""
+
         try:
             nb_path = _notebook_arg(notebook_default, notebook_path)
             sess.check_allowed_notebook(nb_path)
             with sess.notebook_exclusive(nb_path):
                 try_validate_notebook_file(nb_path)
+                changed = False
+                if persist_cell_ids:
+                    nb = load_notebook(nb_path)
+                    changed = ensure_cell_ids(nb, persist_path=nb_path)
+                stamp = notebook_file_stamp(nb_path)
                 return {
                     "status": "ok",
                     "llm_jupyter_version": _LMJ_VERSION,
                     **_notebook_resolution_meta(notebook_default, notebook_path, nb_path),
+                    "persist_cell_ids_used": bool(persist_cell_ids),
+                    "cell_ids_assigned_written": changed,
+                    "notebook_file_stamp": stamp,
                 }
         except NotebookConcurrentBusy as e:
             return _notebook_exclusive_busy("notebook_validate", e)
         except Exception as e:
             return _mcp_tool_error("notebook_validate", e)
-
-    @mcp.tool(name="notebook_outline")
-    def notebook_outline(
-        notebook_path: str | None = None,
-        persist_cell_ids: bool = False,
-        preview_chars: int = 200,
-        include_sources: bool = False,
-        max_source_chars: int = 8000,
-        max_cells_with_sources: int = 64,
-        max_total_source_chars: int = 120000,
-    ) -> dict[str, object]:
-        """Map cells without a kernel; include_sources=true adds capped source_full fields per outline row."""
-        try:
-            nb_path = _notebook_arg(notebook_default, notebook_path)
-            sess.check_allowed_notebook(nb_path)
-            with sess.notebook_exclusive(nb_path):
-                try_validate_notebook_file(nb_path)
-                nb = load_notebook(nb_path)
-                if persist_cell_ids:
-                    ensure_cell_ids(nb, persist_path=nb_path)
-                cap = max(_OUTLINE_PREVIEW_CHARS_FLOOR, min(int(preview_chars), _OUTLINE_PREVIEW_CHARS_CEIL))
-
-                include_src = bool(include_sources)
-                per_cap = (
-                    max(_OUTLINE_SOURCE_PER_CELL_MIN, min(int(max_source_chars), _OUTLINE_SOURCE_PER_CELL_CEIL))
-                    if include_src
-                    else 0
-                )
-                max_cells_eff = (
-                    max(1, min(int(max_cells_with_sources), _OUTLINE_MAX_CELLS_WITH_SOURCES_CEIL))
-                    if include_src
-                    else 0
-                )
-                total_budget = (
-                    max(
-                        _OUTLINE_TOTAL_SOURCES_MIN_FLOOR,
-                        min(int(max_total_source_chars), _OUTLINE_TOTAL_SOURCES_CEIL),
-                    )
-                    if include_src
-                    else 0
-                )
-
-                def _src_text(cell_src: str | list[str]) -> str:
-                    if isinstance(cell_src, list):
-                        return "".join(cell_src)
-                    return str(cell_src)
-
-                rows: list[dict[str, object]] = []
-                code_n = 0
-                code_indices: list[int] = []
-                total_written = 0
-                cells_with_source = 0
-                include_sources_truncated = False
-                omit_cell_cap_count = 0
-                omit_char_cap_count = 0
-                truncated_mid_cell_count = 0
-
-                for i, cell in enumerate(nb.cells):
-                    ctype = str(cell.get("cell_type", ""))
-                    meta = cell.get("metadata") if isinstance(cell.get("metadata"), dict) else {}
-                    cid = meta.get("cell_id") if ctype in ("code", "markdown", "raw") else None
-                    raw = _src_text(cell.source)
-                    snippet = raw.strip("\n")
-                    if len(snippet) > cap:
-                        snippet = snippet[: max(1, cap - 3)] + "..."
-                    row: dict[str, object] = {
-                        "index": i,
-                        "cell_type": ctype,
-                        "cell_id": str(cid).strip() if cid else None,
-                        "source_preview": snippet,
-                    }
-                    if include_src:
-                        if cells_with_source >= max_cells_eff:
-                            row["source_full_omitted"] = "cell_cap"
-                            omit_cell_cap_count += 1
-                        elif total_written >= total_budget:
-                            row["source_full_omitted"] = "char_cap"
-                            omit_char_cap_count += 1
-                        else:
-                            full = raw
-                            room_cell = per_cap
-                            room_budget = total_budget - total_written
-                            room = max(0, min(room_cell, room_budget))
-                            if room == 0:
-                                row["source_full_omitted"] = "char_cap"
-                                omit_char_cap_count += 1
-                            else:
-                                if len(full) > room:
-                                    frag = full[: max(1, room - 3)] + "..."
-                                    include_sources_truncated = True
-                                    truncated_mid_cell_count += 1
-                                else:
-                                    frag = full
-                                row["source_full"] = frag
-                                total_written += len(frag)
-                                cells_with_source += 1
-                    rows.append(row)
-                    if ctype == "code":
-                        code_n += 1
-                        code_indices.append(i)
-
-                body: dict[str, object] = {
-                    "status": "ok",
-                    "llm_jupyter_version": _LMJ_VERSION,
-                    "notebook_filename": nb_path.name,
-                    "code_cell_count": code_n,
-                    "code_cell_indices": code_indices,
-                    **_notebook_resolution_meta(notebook_default, notebook_path, nb_path),
-                    "persist_cell_ids_used": bool(persist_cell_ids),
-                    "preview_chars_used": cap,
-                    "cells": rows,
-                }
-                if include_src:
-                    body["include_sources_used"] = True
-                    body["max_source_chars_used"] = per_cap
-                    body["max_cells_with_sources_used"] = max_cells_eff
-                    body["max_total_source_chars_used"] = total_budget
-                    body["source_chars_emitted"] = total_written
-                    body["cells_with_source_emitted"] = cells_with_source
-                    body["include_sources_truncated"] = include_sources_truncated
-                    body["outline_sources_truncation_summary"] = {
-                        "cells_total_notebook": len(nb.cells),
-                        "cells_with_full_source_emitted": cells_with_source,
-                        "source_full_omitted_cell_cap_count": omit_cell_cap_count,
-                        "source_full_omitted_char_cap_count": omit_char_cap_count,
-                        "source_truncated_mid_cell_count": truncated_mid_cell_count,
-                    }
-                body["outline_caps_requested"] = {
-                    "preview_chars": int(preview_chars),
-                    "include_sources": include_src,
-                    "max_source_chars": int(max_source_chars),
-                    "max_cells_with_sources": int(max_cells_with_sources),
-                    "max_total_source_chars": int(max_total_source_chars),
-                }
-                body["outline_caps_effective"] = {
-                    "preview_chars_used": cap,
-                    "preview_chars_floor": _OUTLINE_PREVIEW_CHARS_FLOOR,
-                    "preview_chars_ceiling": _OUTLINE_PREVIEW_CHARS_CEIL,
-                    "floors_rationale": (
-                        "Snippet previews use a 48-character floor so tiny previews stay informative; "
-                        "include_sources per-cell budgets floor at 200 chars; aggregated source budget floors at "
-                        "4096 chars so callers cannot ask for negligible totals—all clamped downward by sane ceilings."
-                    ),
-                }
-                if include_src:
-                    body["outline_caps_effective"].update(
-                        {
-                            "max_source_chars_used": per_cap,
-                            "max_source_chars_floor": _OUTLINE_SOURCE_PER_CELL_MIN,
-                            "max_source_chars_ceiling": _OUTLINE_SOURCE_PER_CELL_CEIL,
-                            "max_cells_with_sources_used": max_cells_eff,
-                            "max_cells_with_sources_ceiling": _OUTLINE_MAX_CELLS_WITH_SOURCES_CEIL,
-                            "max_total_source_chars_used": total_budget,
-                            "total_source_chars_floor": _OUTLINE_TOTAL_SOURCES_MIN_FLOOR,
-                            "max_total_source_chars_ceiling": _OUTLINE_TOTAL_SOURCES_CEIL,
-                        },
-                    )
-                return body
-        except NotebookConcurrentBusy as e:
-            return _notebook_exclusive_busy("notebook_outline", e)
-        except Exception as e:
-            return _mcp_tool_error("notebook_outline", e)
-
     @mcp.tool(name="cells_apply")
     def cells_apply(
         notebook_path: str | None = None,
@@ -625,63 +382,7 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
         except Exception as e:
             return _mcp_tool_error("variable_preview", e)
 
-    @mcp.tool(name="run_stream_read")
-    def run_stream_read(
-        notebook_path: str | None = None,
-        run_id: str = "",
-        stream: str = "stdout",
-        byte_offset: int = 0,
-        max_bytes: int | None = None,
-    ) -> dict[str, object]:
-        """Read a capped UTF-8 byte slice from spilled run stdout/stderr artifacts (after mcp_stream_spilled run)."""
-        try:
-            nb_path = _notebook_arg(notebook_default, notebook_path)
-            sess.check_allowed_notebook(nb_path)
-            with sess.notebook_exclusive(nb_path):
-                return sess.run_stream_read(
-                    notebook_path=notebook_path,
-                    run_id=run_id,
-                    stream=stream,
-                    byte_offset=byte_offset,
-                    max_bytes=max_bytes,
-                )
-        except NotebookConcurrentBusy as e:
-            return _notebook_exclusive_busy("run_stream_read", e)
-        except Exception as e:
-            return _mcp_tool_error("run_stream_read", e)
 
-    @mcp.tool(name="companion_validate")
-    def companion_validate(
-        notebook_path: str | None = None,
-        companion_path: str | None = None,
-        companion_strict: bool = False,
-    ) -> dict[str, object]:
-        """Cross-check `.apynb` or `.companion.yaml` neighbours vs notebook code cells."""
-        nb_path: Path | None = None
-        try:
-            nb_path = _notebook_arg(notebook_default, notebook_path)
-            sess.check_allowed_notebook(nb_path)
-            with sess.notebook_exclusive(nb_path):
-                rep = sess.inspect_companion(
-                    notebook_path=notebook_path,
-                    companion_path=companion_path,
-                    companion_strict=companion_strict,
-                )
-        except NotebookConcurrentBusy as e:
-            return _notebook_exclusive_busy("companion_validate", e)
-        except Exception as e:
-            err_d = stable_tool_error("companion_validate", e, _tool_exception_traceback_text(e))
-            if nb_path is not None:
-                err_d.update(_notebook_resolution_meta(notebook_default, notebook_path, nb_path))
-            return err_d
-        merged: dict[str, object] = {
-            "llm_jupyter_version": _LMJ_VERSION,
-            **_notebook_resolution_meta(notebook_default, notebook_path, nb_path),
-        }
-        merged.update(rep)
-        st = str(rep.get("status", "ok"))
-        merged["status"] = st
-        return merged
 
     @mcp.tool(name="server_info")
     def server_info() -> dict[str, object]:
@@ -696,7 +397,7 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
                 tool_names = []
         lock_to = notebook_exclusive_lock_timeout_seconds()
         kernel_pool = sess.notebook_kernel_pool_paths_resolved()
-        return {
+        out_si: dict[str, object] = {
             "status": "ok",
             "llm_jupyter_version": _LMJ_VERSION,
             "process_session_id": PROCESS_SESSION_ID,
@@ -705,7 +406,6 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
                 "Strictly len(tool_names)—use tool_names as the authoritative tool list for this MCP process; "
                 "pair with llm_jupyter_version (not repository README prose alone)."
             ),
-            "cursor_mcp_registry_key_hint": _CURSOR_MCP_REGISTRY_KEY,
             "python_executable": sys.executable,
             "process_pid": os.getpid(),
             "process_cwd": os.getcwd(),
@@ -719,6 +419,10 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
             "notebook_kernel_pool_n": len(kernel_pool),
             "notebook_kernel_pool_paths_resolved": kernel_pool,
         }
+        hints = os.environ.get("LLM_JUPYTER_CURSOR_HINTS", "").strip().lower()
+        if hints in ("1", "true", "yes", "on"):
+            out_si["cursor_mcp_registry_key_hint"] = _CURSOR_MCP_REGISTRY_KEY
+        return out_si
 
     # Let local tooling (e.g. scripts/agent_mcp_selftest.py) shut down kernels cleanly between calls.
     mcp._llm_kernel_session = sess  # noqa: SLF001

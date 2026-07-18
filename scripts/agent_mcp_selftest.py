@@ -98,7 +98,7 @@ def main() -> None:
         epilog=(
             "Examples:\n"
             "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_euler.ipynb --list-cell-ids\n"
-            "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_buffer.ipynb companion_validate\n"
+            "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_buffer.ipynb notebook_execution_plan\n"
             "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_lognormal.ipynb run run_all=true\n"
             "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_beta.ipynb run run_all=true\n"
             "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_markov.ipynb run run_all=true\n"

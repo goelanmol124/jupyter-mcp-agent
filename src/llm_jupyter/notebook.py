@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import uuid
 from typing import Any
 
@@ -55,6 +56,50 @@ def load_notebook_ensuring_cell_ids(path: str | Any) -> tuple[nbformat.NotebookN
 
 def indices_of_code_cells(nb: nbformat.NotebookNode) -> list[int]:
     return [i for i, c in enumerate(nb.cells) if c.cell_type == "code"]
+
+
+def cell_exclude_from_bulk(cell: Any) -> bool:
+    """True when metadata.llm_jupyter.exclude_from_bulk is truthy ([PRD conformance] probe cells).
+
+    Applies to bulk selectors ``run_all`` / ``run_until`` only—not to single-cell ``run(..., cell_id=...)``.
+    """
+
+    md = getattr(cell, "metadata", {}) or {}
+    if not isinstance(md, dict):
+        return False
+    lj = md.get("llm_jupyter")
+    if isinstance(lj, dict) and bool(lj.get("exclude_from_bulk")):
+        return True
+    return False
+
+
+def bulk_eligible_code_indices(nb: nbformat.NotebookNode) -> list[int]:
+    """Code-cell indices participating in bulk ``run_all`` / ``run_until`` semantics."""
+    out: list[int] = []
+    for i in indices_of_code_cells(nb):
+        if not cell_exclude_from_bulk(nb.cells[i]):
+            out.append(i)
+    return out
+
+
+def sources_concat_sha256_prefix(nb: nbformat.NotebookNode, *, prefix_len: int = 16) -> str:
+    """Stable manifest fingerprint over all code-cell sources ([PRD conformance]).
+
+    Uses the same LF + trailing-whitespace normalization as companion drift checks.
+    """
+    # Local import avoids circular imports if companion pulls notebook helpers.
+    from llm_jupyter.companion import normalize_source
+
+    chunks: list[str] = []
+    for cell in nb.cells:
+        if getattr(cell, "cell_type", None) != "code":
+            continue
+        src_val = getattr(cell, "source", "") or ""
+        if isinstance(src_val, list):
+            src_val = "".join(src_val)
+        chunks.append(normalize_source(str(src_val)))
+    blob = "\n".join(chunks).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()[:prefix_len]
 
 
 def cell_index_for_stable_id(nb: nbformat.NotebookNode, cell_id: str) -> int:

@@ -1,6 +1,24 @@
 # Changelog
 
-## [0.2.6] — 2026-05-03
+## [0.3.0] — 2026-05-03
+
+### Breaking (MCP)
+
+- Removed MCP tools **`dry_run`**, **`kernel_ping`**, **`companion_validate`**, **`run_stream_read`**, **`notebook_outline`**. Use **`notebook_execution_plan`** (unified planner: structural_probe or one selector); companion checks ride **`run` / notebook_execution_plan** with **`companion_strict`** / sidecar discovery; spilled streams are read via **`llm_jupyter.stream_artifacts.read_run_stream_slice`** (filesystem under **`.llm_jupyter/runs/<run_id>/`**); **`notebook_validate(..., persist_cell_ids=true)`** replaces outline’s ID persistence—full cell listings use **`python -m llm_jupyter export-apynb`** or your editor.
+
+### Added
+
+- **`sources_concat_sha256_prefix`** on **`manifest.jsonl`** rows; optional **`notebook_snapshot_relative`** when **`LLM_JUPYTER_RECORD_NOTEBOOK_SNAPSHOT=1`** and **`run`** **`mode=record`**.
+- **`metadata.llm_jupyter.exclude_from_bulk`** skips cells for **`run_all` / `run_until`** only (explicit **`cell_id`** still runs them).
+- Previews widen to **`display_data`** **`text/plain`** plus **`execute_result`**.
+- **`variable_preview`** JSON is delimiter-wrapped in kernel stdout so noisy prints cannot break parsing.
+- **`server_info` `cursor_mcp_registry_key_hint`** only when **`LLM_JUPYTER_CURSOR_HINTS`** is truthy.
+
+### Changed
+
+- **`LLM_JUPYTER_MAX_NOTEBOOK_KERNELS=0`** (and other non-positive parses) normalize to pool cap **32** (same as malformed env).
+
+---
 
 ### Added
 

@@ -8,7 +8,7 @@
         "llm_jupyter",
         "serve",
         "-n",
-        "demos/agent_scratch.ipynb"
+        "demos/rnd_benchmark_2026/analysis_mcp.ipynb"
       ],
       "cwd": "${workspaceFolder}",
       "env": {

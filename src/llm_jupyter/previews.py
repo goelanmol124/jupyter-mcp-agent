@@ -22,7 +22,8 @@ def previews_from_cells(
         cell_id = cell.get("metadata", {}).get("cell_id")
         lines: list[str] = []
         for out in getattr(cell, "outputs", []) or []:
-            if out.get("output_type") != "execute_result":
+            ot = out.get("output_type")
+            if ot not in ("execute_result", "display_data"):
                 continue
             data = out.get("data", {})
             txt = data.get("text/plain")

@@ -67,9 +67,9 @@ def test_kernel_field_hints_respect_verbosity_compact(monkeypatch, tmp_path) -> 
 
     sess = KernelSession(nb_path, [], "explore")
     try:
-        assert "field_hints" in sess.kernel_ping()
+        assert "field_hints" in sess.kernel_status()
         monkeypatch.setenv("LLM_JUPYTER_VERBOSITY_COMPACT", "1")
-        assert "field_hints" not in sess.kernel_ping()
+        assert "field_hints" not in sess.kernel_status()
     finally:
         sess.close()
 
@@ -91,3 +91,31 @@ def test_server_info_includes_process_session_id(tmp_path) -> None:
     assert body.get("status") == "ok"
     sess_id = body.get("process_session_id")
     assert isinstance(sess_id, str) and len(sess_id) >= 8
+
+
+def test_server_info_cursor_hints_env_gated(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("LLM_JUPYTER_CURSOR_HINTS", raising=False)
+    nb_path = tmp_path / "n.ipynb"
+    nbfmt.write(nbf.new_notebook(cells=[]), open(nb_path, "w", encoding="utf-8"))
+
+    async def _call() -> dict[str, object]:
+        mcp = build_mcp(nb_path, [], "explore")
+        tm = mcp._tool_manager
+        try:
+            body = await tm.call_tool("server_info", {}, context=None, convert_result=False)
+        finally:
+            getattr(mcp, "_llm_kernel_session").close()
+        return dict(body)
+
+    bare = asyncio.run(_call())
+    assert "cursor_mcp_registry_key_hint" not in bare
+    monkeypatch.setenv("LLM_JUPYTER_CURSOR_HINTS", "1")
+    hinted = asyncio.run(_call())
+    assert hinted.get("cursor_mcp_registry_key_hint") == "llm-jupyter"
+
+
+def test_session_cap_zero_env_falls_back_to_default(monkeypatch) -> None:
+    from llm_jupyter.session import _session_cap
+
+    monkeypatch.setenv("LLM_JUPYTER_MAX_NOTEBOOK_KERNELS", "0")
+    assert _session_cap() == 32

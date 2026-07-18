@@ -11,8 +11,8 @@ COMPANION_STRICT_MISSING = (
 )
 
 COMPANION_MIRROR_STALE_HINT = (
-    "Companion mirror present beside the notebook—refresh export-apynb / YAML before relying on companion_validate; "
-    "drift is possible after notebook_cells_patch/cells_apply or UI edits."
+    "Companion mirror present beside the notebook—refresh export-apynb / YAML before relying on run or "
+    "notebook_execution_plan drift checks; edits via notebook_cells_patch/cells_apply or the UI require re-export."
 )
 
 NOTEBOOK_EDIT_PERSISTED_VS_KERNEL_HINT = (

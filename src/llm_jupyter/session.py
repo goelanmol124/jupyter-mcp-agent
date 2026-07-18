@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import threading
 import time
 import traceback
@@ -49,6 +50,7 @@ from llm_jupyter.notebook_cells_patch import (
     notebook_cells_summary,
 )
 from llm_jupyter.notebook import (
+    bulk_eligible_code_indices,
     cell_index_for_id,
     cell_index_for_stable_id,
     ensure_cell_ids,
@@ -56,6 +58,7 @@ from llm_jupyter.notebook import (
     load_notebook,
     load_notebook_ensuring_cell_ids,
     save_notebook,
+    sources_concat_sha256_prefix,
     strip_cell_outputs_matching_type,
     validate_notebook_node,
 )
@@ -64,9 +67,8 @@ from llm_jupyter.paths import allowed_roots_for_notebook, is_under_roots, normal
 from llm_jupyter.previews import previews_from_cells
 from llm_jupyter.stamp import notebook_file_stamp
 from llm_jupyter.stream_artifacts import (
+    evidence_root_for_notebook,
     mcp_stream_char_budget,
-    read_run_stream_slice,
-    run_stream_read_max_bytes,
     write_run_stream_artifacts,
 )
 
@@ -91,6 +93,39 @@ def _omit_stream_chunks_requested(omit_stream_chunks: bool | None) -> bool:
         return bool(omit_stream_chunks)
     raw = os.environ.get("LLM_JUPYTER_OMIT_STREAM_CHUNK_MAP", "").strip().lower()
     return raw in ("1", "true", "yes", "on")
+
+
+def _env_truthy(raw: str | None) -> bool:
+    return (raw or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+_PREVIEW_JSON_START = "__LLM_JUPYTER_PREVIEW_JSON_START__"
+_PREVIEW_JSON_END = "__LLM_JUPYTER_PREVIEW_JSON_END__"
+
+
+def _manifest_sources_and_optional_snapshot(nb: Any, path: Path, run_id: str, mode_eff: str) -> tuple[str, str | None]:
+    h = sources_concat_sha256_prefix(nb)
+    snap_rel: str | None = None
+    if mode_eff == "record" and _env_truthy(os.environ.get("LLM_JUPYTER_RECORD_NOTEBOOK_SNAPSHOT")):
+        ev = evidence_root_for_notebook(path)
+        snap_dir = ev / "notebook_snapshots" / run_id
+        snap_dir.mkdir(parents=True, exist_ok=True)
+        dest = snap_dir / "notebook.ipynb"
+        shutil.copy2(path, dest)
+        try:
+            snap_rel = str(dest.resolve().relative_to(path.parent.resolve())).replace("\\", "/")
+        except ValueError:
+            snap_rel = str(dest.resolve())
+    return h, snap_rel
+
+
+def _variable_preview_stdout_blob(so_txt: str) -> str:
+    si = so_txt.find(_PREVIEW_JSON_START)
+    ei = so_txt.find(_PREVIEW_JSON_END)
+    if si >= 0 and ei > si:
+        return so_txt[si + len(_PREVIEW_JSON_START) : ei].strip()
+    blob_lines = [ln.strip() for ln in so_txt.split("\n") if ln.strip()]
+    return blob_lines[-1] if blob_lines else ""
 
 
 class NotebookConcurrentBusy(RuntimeError):
@@ -173,7 +208,9 @@ def _session_cap() -> int:
         n = int(raw)
     except ValueError:
         return 32
-    return max(1, min(n, 256)) if n != 0 else 0
+    if n <= 0:
+        return 32
+    return max(1, min(n, 256))
 
 
 class NotebookKernelHandle:
@@ -544,36 +581,6 @@ class KernelSession:
         out["notebook_kernel_active"] = True
         return {**base, **out}
 
-    def kernel_ping(self, notebook_path: str | None = None) -> dict[str, Any]:
-        """Cheap liveness ping: resolves path like kernel_* without loading notebook JSON."""
-
-        path, basis = self._kernel_tools_resolve(notebook_path)
-        k = self._canonical(path)
-        h = self._handles.get(k)
-        base = {
-            **_server_tool_digest(),
-            **self.notebook_resolution_meta(notebook_path, path),
-            "notebook_path_resolution_basis": basis,
-            **self.kernel_field_hints_fragment(),
-        }
-        if h is None:
-            return {
-                **base,
-                "notebook_path": str(path),
-                "kernel_generation": 0,
-                "kernel_alive": False,
-                "interrupted_flag": False,
-                "notebook_kernel_active": False,
-                "note": (
-                    "No pooled kernel slot for this path yet; run(run or kernel_restart) establishes the handle "
-                    "(this ping did not parse the .ipynb)."
-                ),
-            }
-        st = dict(h.kernel_status())
-        st["notebook_path"] = str(path)
-        st["notebook_kernel_active"] = True
-        return {**base, **st}
-
     def check_allowed_notebook(self, notebook_path: Path) -> None:
         cand = notebook_path.expanduser().resolve()
         if self.default_notebook:
@@ -842,9 +849,16 @@ class KernelSession:
             "        _r = _r[: max(1, _cap - 3)] + '...'\n"
             "    _out[_n] = _r\n"
             '_json_text = _J.dumps(_out, ensure_ascii=False)\n'
+            "print(__PSTART__)\n"
             "print(_json_text)\n"
+            "print(__PEND__)\n"
         )
-        snippet = snippet.replace("__CAP__", str(cap)).replace("__NAMES__", repr(picked))
+        snippet = (
+            snippet.replace("__CAP__", str(cap))
+            .replace("__NAMES__", repr(picked))
+            .replace("__PSTART__", repr(_PREVIEW_JSON_START))
+            .replace("__PEND__", repr(_PREVIEW_JSON_END))
+        )
 
         handle = self._get_handle(path)
         t0 = time.monotonic()
@@ -887,8 +901,7 @@ class KernelSession:
             }
 
         so_txt, se_txt = collect_streams(outs)
-        blob_lines = [ln.strip() for ln in so_txt.split("\n") if ln.strip()]
-        blob = blob_lines[-1] if blob_lines else ""
+        blob = _variable_preview_stdout_blob(so_txt)
 
         previews: dict[str, str] | None = None
         if blob:
@@ -1027,17 +1040,18 @@ class KernelSession:
     def _indices_from_selector(self, nb: Any, selector: tuple[str, str | None]) -> list[int]:
         kind, sid = selector
         code_idx = indices_of_code_cells(nb)
+        bulk = bulk_eligible_code_indices(nb)
         if kind == "none" or not code_idx:
             return []
         if kind == "cell":
             assert sid is not None
             return [cell_index_for_id(nb, sid)]
         if kind == "all":
-            return code_idx
+            return bulk
         if kind == "until":
             assert sid is not None
             target_i = cell_index_for_id(nb, sid)
-            return [i for i in code_idx if i <= target_i]
+            return [i for i in bulk if i <= target_i]
         raise AssertionError(f"bad selector {kind}")
 
     def _canonical_run_path(self, notebook_path: str | None) -> Path:
@@ -1098,12 +1112,10 @@ class KernelSession:
         companion_path: str | None = None,
         companion_strict: bool = False,
     ) -> dict[str, Any]:
-        """Resolve path, selectors, and cell indices without starting or touching the kernel."""
+        """Backward-compatible alias for ``notebook_execution_plan`` (tests / Python callers)."""
 
-        path = self._canonical_run_path(notebook_path)
-        handle = self._get_handle(path)
-        nb, companion_summary, code_idx, selector, indices = self._notebook_load_and_execution_plan(
-            path,
+        return self.notebook_execution_plan(
+            notebook_path=notebook_path,
             cell_id=cell_id,
             run_all=run_all,
             run_until_cell_id=run_until_cell_id,
@@ -1111,32 +1123,6 @@ class KernelSession:
             companion_path=companion_path,
             companion_strict=companion_strict,
         )
-        kind, sid = selector
-        cells_planned: list[dict[str, Any]] = []
-        for idx in indices:
-            cell = nb.cells[idx]
-            cid = str(cell.get("metadata", {}).get("cell_id", "") or "").strip()
-            cells_planned.append({"cell_index": idx, "cell_id": cid or None})
-
-        out: dict[str, Any] = {
-            **_server_tool_digest(),
-            "status": "ok",
-            **self.notebook_resolution_meta(notebook_path, path),
-            "selector_kind": kind,
-            "selector_arg": sid,
-            "code_cell_indices": code_idx,
-            "execution_cell_indices": indices,
-            "cells_planned": cells_planned,
-            "cells_planned_n": len(indices),
-            "kernel_status_preview": handle.kernel_status(),
-            "note": (
-                "No execution—kernel not started here. kernel_status_preview is the pooled handle "
-                "for this notebook only."
-            ),
-        }
-        if companion_summary is not None and companion_summary.get("status") != "skipped":
-            out["companion"] = companion_summary
-        return out
 
     def notebook_execution_plan(
         self,
@@ -1148,7 +1134,7 @@ class KernelSession:
         companion_path: str | None = None,
         companion_strict: bool = False,
     ) -> dict[str, Any]:
-        """Notebook structure + companion gate; optional selector (same semantics as ``dry_run``) or structural-only probe."""
+        """Notebook structure + companion; optional selectors (omit all three ⇒ structural_probe)."""
 
         path = self._canonical_run_path(notebook_path)
         handle = self._get_handle(path)
@@ -1197,6 +1183,16 @@ class KernelSession:
             cid_row = str(cell.get("metadata", {}).get("cell_id", "") or "").strip()
             cells_planned.append({"cell_index": idx, "cell_id": cid_row or None})
 
+        if kind == "structural_probe":
+            note = (
+                "No execution—kernel not started. selector_kind=structural_probe: code_cell_indices lists all code cells; "
+                "pass exactly one of cell_id / run_all / run_until_cell_id to mirror run execution_cell_indices."
+            )
+        else:
+            note = (
+                "No execution—kernel not started. kernel_status_preview reflects the pooled handle for this notebook."
+            )
+
         out: dict[str, Any] = {
             **_server_tool_digest(),
             "status": "ok",
@@ -1208,53 +1204,11 @@ class KernelSession:
             "cells_planned": cells_planned,
             "cells_planned_n": len(indices),
             "kernel_status_preview": handle.kernel_status(),
-            "note": (
-                "No execution—kernel not started here. selector_kind=structural_probe lists code cells only; "
-                "pass exactly one of cell_id / run_all / run_until_cell_id for the same execution_cell_indices as dry_run. "
-                "dry_run still requires a selector—use this tool when you need ids/indices before choosing a target."
-            ),
+            "note": note,
         }
         if companion_summary is not None and companion_summary.get("status") != "skipped":
             out["companion"] = companion_summary
         return out
-
-    def run_stream_read(
-        self,
-        notebook_path: str | None = None,
-        *,
-        run_id: str,
-        stream: str = "stdout",
-        byte_offset: int = 0,
-        max_bytes: int | None = None,
-    ) -> dict[str, Any]:
-        """Bounded read of spill artifacts (``run`` with ``mcp_stream_spilled``)."""
-
-        nb_path_arg = notebook_path or (str(self.default_notebook) if self.default_notebook else "")
-        if not str(nb_path_arg).strip():
-            raise ValueError(
-                "notebook_path is required unless the MCP server started with --notebook / -n.",
-            )
-        path = normalize_allowed_path(nb_path_arg)
-        if not path.exists():
-            raise FileNotFoundError(f"Notebook not found: {path}")
-        self.check_allowed_notebook(path)
-
-        cap = int(max_bytes) if max_bytes is not None else run_stream_read_max_bytes()
-        cap = max(256, min(cap, 2_000_000))
-        slice_info = read_run_stream_slice(
-            path,
-            run_id,
-            stream,
-            byte_offset=int(byte_offset),
-            max_bytes=cap,
-        )
-        return {
-            **_server_tool_digest(),
-            "status": "ok",
-            **self.notebook_resolution_meta(notebook_path, path),
-            **slice_info,
-            "run_stream_read_max_bytes_effective": cap,
-        }
 
     def run(
         self,
@@ -1379,12 +1333,14 @@ class KernelSession:
                 persist_stream_outputs=persist_early,
             )
             stamp = notebook_file_stamp(path)
+            src_hash, nb_snap_rel = _manifest_sources_and_optional_snapshot(nb, path, run_id, mode_eff)
             man_early: dict[str, Any] = {
                 "run_id": run_id,
                 "ts_ms": int(time.time() * 1000),
                 "mode": mode_eff,
                 "notebook_path": str(path),
                 "notebook_file_stamp": stamp,
+                "sources_concat_sha256_prefix": src_hash,
                 "python_env_snapshot": payload["python_env_snapshot"],
                 "kernel_generation": handle.kernel_generation,
                 "cells_executed": [],
@@ -1392,6 +1348,8 @@ class KernelSession:
                 "note": "no_code_cells",
                 "companion": companion_summary,
             }
+            if nb_snap_rel is not None:
+                man_early["notebook_snapshot_relative"] = nb_snap_rel
             if mode_eff == "record":
                 meta_e = env_snapshot_ttl_meta_from_snapshot(payload["python_env_snapshot"])
                 if meta_e:
@@ -1485,7 +1443,7 @@ class KernelSession:
                     if kd is not None and halt_on_error:
                         break
 
-                ran_ok_full = indices_of_code_cells(nb) == executed_in_order and status == "ok"
+                ran_ok_full = bulk_eligible_code_indices(nb) == executed_in_order and status == "ok"
         except KeyboardInterrupt:
             status = "interrupted"
             handle.interrupted = True
@@ -1611,12 +1569,14 @@ class KernelSession:
             persist_stream_outputs=persist_eff,
         )
 
+        src_hash2, nb_snap_rel2 = _manifest_sources_and_optional_snapshot(nb, path, run_id, mode_eff)
         man_row: dict[str, Any] = {
             "run_id": run_id,
             "ts_ms": int(time.time() * 1000),
             "mode": mode_eff,
             "notebook_path": str(path),
             "notebook_file_stamp": payload["notebook_file_stamp"],
+            "sources_concat_sha256_prefix": src_hash2,
             "python_env_snapshot": payload["python_env_snapshot"],
             "kernel_generation": handle.kernel_generation,
             "cells_executed": cells_executed_ids,
@@ -1625,6 +1585,8 @@ class KernelSession:
             "halt_on_error": halt_on_error,
             "companion": companion_summary,
         }
+        if nb_snap_rel2 is not None:
+            man_row["notebook_snapshot_relative"] = nb_snap_rel2
         if stream_artifacts_meta:
             man_row["stream_artifacts"] = stream_artifacts_meta
         if mode_eff == "record":
