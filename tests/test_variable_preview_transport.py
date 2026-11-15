@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from llm_jupyter.session import (
+from jupyter_mcp_agent.session import (
     _PREVIEW_JSON_END,
     _PREVIEW_JSON_START,
     _variable_preview_stdout_blob,

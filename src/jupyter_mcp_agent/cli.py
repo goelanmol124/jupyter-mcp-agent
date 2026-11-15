@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from llm_jupyter.server import build_mcp
+from jupyter_mcp_agent.server import build_mcp
 
 
 def apply_process_cwd(
@@ -40,7 +40,7 @@ def _serve_child_argv(args: argparse.Namespace) -> list[str]:
     child: list[str] = [
         sys.executable,
         "-m",
-        "llm_jupyter",
+        "jupyter_mcp_agent",
         "serve",
     ]
     if nb is not None:
@@ -57,7 +57,7 @@ def _serve_child_argv(args: argparse.Namespace) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> None:
-    p = argparse.ArgumentParser(prog="llm-jupyter")
+    p = argparse.ArgumentParser(prog="jupyter-mcp-agent")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     serve = sub.add_parser("serve", help="Serve MCP tools over stdio (Cursor-friendly)")
@@ -86,7 +86,7 @@ def main(argv: list[str] | None = None) -> None:
         "--watch",
         action="store_true",
         help=(
-            "Restart automatically when llm_jupyter package sources change (dev; "
+            "Restart automatically when jupyter_mcp_agent package sources change (dev; "
             "requires optional dependency watchfiles, e.g. pip install -e \".[dev]\")"
         ),
     )
@@ -160,14 +160,14 @@ def main(argv: list[str] | None = None) -> None:
 
     args = p.parse_args(argv)
     if args.cmd == "export-apynb":
-        from llm_jupyter.companion import write_companion_from_notebook
+        from jupyter_mcp_agent.companion import write_companion_from_notebook
 
         outp = write_companion_from_notebook(args.notebook, args.out, fmt=args.format)
         print(outp)
         return
 
     if args.cmd == "manifest-tail":
-        from llm_jupyter.manifest import (
+        from jupyter_mcp_agent.manifest import (
             explain_manifest_miss_for_run_id,
             manifest_records_for_run,
             tail_manifest_records,

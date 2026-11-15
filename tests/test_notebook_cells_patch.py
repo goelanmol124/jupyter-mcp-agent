@@ -5,9 +5,9 @@ from pathlib import Path
 import nbformat.v4 as nbf
 import pytest
 
-from llm_jupyter.notebook import load_notebook
-from llm_jupyter.notebook_cells_patch import normalize_patch_operations
-from llm_jupyter.session import KernelSession
+from jupyter_mcp_agent.notebook import load_notebook
+from jupyter_mcp_agent.notebook_cells_patch import normalize_patch_operations
+from jupyter_mcp_agent.session import KernelSession
 
 
 def test_normalize_insert_requires_exactly_one_anchor() -> None:

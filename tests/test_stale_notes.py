@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from llm_jupyter.session import KernelSession, NotebookKernelHandle
+from jupyter_mcp_agent.session import KernelSession, NotebookKernelHandle
 
 
 def _handle(

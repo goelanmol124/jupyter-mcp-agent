@@ -9,7 +9,7 @@ from pathlib import Path
 import nbformat
 import nbformat.v4 as nbf
 
-from llm_jupyter.session import KernelSession
+from jupyter_mcp_agent.session import KernelSession
 
 
 def main() -> None:
@@ -37,7 +37,7 @@ def main() -> None:
     with open(p, "w", encoding="utf-8") as f:
         nbformat.write(nb, f)
 
-    from llm_jupyter.notebook import ensure_cell_ids, load_notebook
+    from jupyter_mcp_agent.notebook import ensure_cell_ids, load_notebook
 
     ensure_cell_ids(load_notebook(p), persist_path=p)
     nb_meta = nbformat.read(open(p, encoding="utf-8"), as_version=4)

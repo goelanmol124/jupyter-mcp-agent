@@ -96,7 +96,7 @@ def explain_manifest_miss_for_run_id(
 
     if not mf.is_file():
         return (
-            f"llm-jupyter manifest-tail: manifest file missing at {mf}. "
+            f"jupyter-mcp-agent manifest-tail: manifest file missing at {mf}. "
             f"Runs append manifest.jsonl beside the notebook; none recorded yet."
         )
 
@@ -104,7 +104,7 @@ def explain_manifest_miss_for_run_id(
     if not scoped:
         # WHY distinguish: avoids chasing a typo'ed run_id when the real issue is path/cwd mismatch.
         return (
-            f"llm-jupyter manifest-tail: manifest exists ({mf}) but has no notebook_path matching "
+            f"jupyter-mcp-agent manifest-tail: manifest exists ({mf}) but has no notebook_path matching "
             f"{nb}. Confirm you passed this notebook path and cwd matches how runs were logged."
         )
 
@@ -118,6 +118,6 @@ def explain_manifest_miss_for_run_id(
     sample = ", ".join(ids_tail) if ids_tail else "(no run_id fields on scoped rows)"
 
     return (
-        f"llm-jupyter manifest-tail: run_id={needle!r} not found for this notebook ({len(scoped)} runs logged). "
+        f"jupyter-mcp-agent manifest-tail: run_id={needle!r} not found for this notebook ({len(scoped)} runs logged). "
         f"Recent run_id samples: {sample}. Retry without --run-id (adjust --last) or paste the exact id."
     )

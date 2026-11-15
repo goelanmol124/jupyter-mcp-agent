@@ -148,7 +148,7 @@ def _insert_index_for(
     before_cell_id: str | None,
     at_index: int | None,
 ) -> int:
-    from llm_jupyter.notebook import cell_index_for_stable_id
+    from jupyter_mcp_agent.notebook import cell_index_for_stable_id
 
     n = len(nb.cells)
     if at_index is not None:
@@ -165,7 +165,7 @@ def _insert_index_for(
 
 
 def _desired_insert_position_pre_pop(nb: Any, op: dict[str, Any]) -> int:
-    from llm_jupyter.notebook import cell_index_for_stable_id
+    from jupyter_mcp_agent.notebook import cell_index_for_stable_id
 
     """Return insert index into ``nb.cells`` BEFORE removing the moved row (range 0..len(nb.cells))."""
 
@@ -197,7 +197,7 @@ def _insert_index_after_removal(desired_pre: int, src: int, post_len: int) -> in
 def apply_notebook_cells_patch(nb: Any, operations: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Mutate ``nb`` in place. Returns a log of coarse effects (for debugging / agents). Raises on any failure."""
 
-    from llm_jupyter.notebook import cell_index_for_stable_id
+    from jupyter_mcp_agent.notebook import cell_index_for_stable_id
 
     log: list[dict[str, Any]] = []
     for opi, op in enumerate(operations):

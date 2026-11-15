@@ -1,7 +1,7 @@
 """Tests for MCP error payloads."""
 from __future__ import annotations
 
-from llm_jupyter.server import _mcp_tool_error
+from jupyter_mcp_agent.server import _mcp_tool_error
 
 
 def _raise_val() -> None:

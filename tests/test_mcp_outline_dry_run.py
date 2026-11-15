@@ -10,11 +10,11 @@ from pathlib import Path
 import nbformat as nbfmt
 import nbformat.v4 as nbf
 
-from llm_jupyter.stream_artifacts import read_run_stream_slice, write_run_stream_artifacts
+from jupyter_mcp_agent.stream_artifacts import read_run_stream_slice, write_run_stream_artifacts
 
 
 async def _call_tool(nb: Path, tool: str, args: dict[str, object]) -> dict[str, object]:
-    from llm_jupyter.server import build_mcp
+    from jupyter_mcp_agent.server import build_mcp
 
     mcp = build_mcp(nb, [], "explore")
     tm = mcp._tool_manager
@@ -43,13 +43,13 @@ def test_notebook_execution_plan_with_selector_matches_resolve(tmp_path: Path) -
     nb = nbf.new_notebook(cells=[nbf.new_code_cell("x = 1")])
     nbfmt.write(nb, open(p, "w", encoding="utf-8"))
 
-    from llm_jupyter.notebook import ensure_cell_ids, load_notebook
+    from jupyter_mcp_agent.notebook import ensure_cell_ids, load_notebook
 
     ensure_cell_ids(load_notebook(p), persist_path=p)
     nb2 = load_notebook(p)
     cid = str(nb2.cells[0]["metadata"]["cell_id"])
 
-    from llm_jupyter.session import KernelSession
+    from jupyter_mcp_agent.session import KernelSession
 
     mcp_plan = asyncio.run(_call_tool(p, "notebook_execution_plan", {"cell_id": cid}))
     sess = KernelSession(p, [], "explore")
@@ -99,7 +99,7 @@ def test_notebook_validate_persist_cell_ids(tmp_path: Path) -> None:
 
 
 def test_manifest_early_includes_sources_fingerprint(tmp_path: Path) -> None:
-    from llm_jupyter.session import KernelSession
+    from jupyter_mcp_agent.session import KernelSession
 
     p = tmp_path / "only_md.ipynb"
     nb = nbf.new_notebook(cells=[nbf.new_markdown_cell("# hi")])

@@ -8,14 +8,14 @@ import pytest
 
 import yaml
 
-from llm_jupyter.companion import (
+from jupyter_mcp_agent.companion import (
     companion_path_for_notebook,
     default_companion_path_for_notebook,
     validate_companion_file,
     write_companion_from_notebook,
 )
-from llm_jupyter.notebook import load_notebook, validate_notebook_node
-from llm_jupyter.session import KernelSession
+from jupyter_mcp_agent.notebook import load_notebook, validate_notebook_node
+from jupyter_mcp_agent.session import KernelSession
 
 
 def _write_nb(path: Path, cells: list) -> None:

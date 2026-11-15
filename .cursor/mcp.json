@@ -1,11 +1,11 @@
 {
   "mcpServers": {
-    "llm-jupyter-project": {
+    "jupyter-mcp-agent-project": {
       "type": "stdio",
       "command": "python",
       "args": [
         "-m",
-        "llm_jupyter",
+        "jupyter_mcp_agent",
         "serve",
         "-n",
         "demos/rnd_benchmark_2026/analysis_mcp.ipynb",

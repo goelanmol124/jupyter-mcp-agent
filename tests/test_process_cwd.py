@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from llm_jupyter.cli import apply_process_cwd
+from jupyter_mcp_agent.cli import apply_process_cwd
 
 
 def test_apply_process_cwd_none_is_noop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

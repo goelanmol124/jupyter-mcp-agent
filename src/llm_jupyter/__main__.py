@@ -1,3 +1,3 @@
-from llm_jupyter.cli import main
+from jupyter_mcp_agent.cli import main
 
 main()

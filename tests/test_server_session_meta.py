@@ -7,8 +7,8 @@ import asyncio
 import nbformat as nbfmt
 import nbformat.v4 as nbf
 
-from llm_jupyter.server import build_mcp
-from llm_jupyter.session import KernelSession, ansi_streams_strip_requested, assistant_quick_compact_requested
+from jupyter_mcp_agent.server import build_mcp
+from jupyter_mcp_agent.session import KernelSession, ansi_streams_strip_requested, assistant_quick_compact_requested
 
 
 def test_effective_allowed_roots_with_default_notebook(tmp_path) -> None:
@@ -111,11 +111,11 @@ def test_server_info_cursor_hints_env_gated(monkeypatch, tmp_path) -> None:
     assert "cursor_mcp_registry_key_hint" not in bare
     monkeypatch.setenv("LLM_JUPYTER_CURSOR_HINTS", "1")
     hinted = asyncio.run(_call())
-    assert hinted.get("cursor_mcp_registry_key_hint") == "llm-jupyter"
+    assert hinted.get("cursor_mcp_registry_key_hint") == "jupyter-mcp-agent"
 
 
 def test_session_cap_zero_env_falls_back_to_default(monkeypatch) -> None:
-    from llm_jupyter.session import _session_cap
+    from jupyter_mcp_agent.session import _session_cap
 
     monkeypatch.setenv("LLM_JUPYTER_MAX_NOTEBOOK_KERNELS", "0")
     assert _session_cap() == 32

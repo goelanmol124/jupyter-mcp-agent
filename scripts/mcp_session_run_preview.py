@@ -60,7 +60,7 @@ async def run_session(
     cell_id: str | None,
     preview_batches: list[list[str]],
 ) -> dict:
-    from llm_jupyter.server import build_mcp
+    from jupyter_mcp_agent.server import build_mcp
 
     _warn_roots(nb, roots)
     mcp = build_mcp(nb, roots, "explore")

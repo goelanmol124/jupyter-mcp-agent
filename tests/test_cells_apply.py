@@ -3,9 +3,9 @@ from __future__ import annotations
 import nbformat.v4 as nbf
 import pytest
 
-from llm_jupyter.cells_apply_helpers import normalize_edits
-from llm_jupyter.notebook import ensure_cell_ids, load_notebook
-from llm_jupyter.session import KernelSession
+from jupyter_mcp_agent.cells_apply_helpers import normalize_edits
+from jupyter_mcp_agent.notebook import ensure_cell_ids, load_notebook
+from jupyter_mcp_agent.session import KernelSession
 
 
 def test_normalize_edits_orders_and_requires_fields():

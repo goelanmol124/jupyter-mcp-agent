@@ -5,7 +5,7 @@ from pathlib import Path
 import nbformat.v4 as nbf
 import pytest
 
-from llm_jupyter.notebook import (
+from jupyter_mcp_agent.notebook import (
     cell_index_for_id,
     cell_index_for_stable_id,
     ensure_cell_ids,

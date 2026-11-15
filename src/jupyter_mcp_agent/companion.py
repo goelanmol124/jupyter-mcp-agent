@@ -162,7 +162,7 @@ def write_companion_from_notebook(
     Persists ``metadata.cell_id`` for any code cell that was missing one.
     Pass ``fmt="yaml"`` to emit YAML (default basename ``{stem}.companion.yaml`` when ``out`` is omitted).
     """
-    from llm_jupyter.notebook import indices_of_code_cells, load_notebook_ensuring_cell_ids, validate_notebook_node
+    from jupyter_mcp_agent.notebook import indices_of_code_cells, load_notebook_ensuring_cell_ids, validate_notebook_node
 
     nb_path = Path(notebook_path).expanduser().resolve()
     if not nb_path.is_file():

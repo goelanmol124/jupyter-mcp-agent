@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from llm_jupyter.server import build_mcp
+from jupyter_mcp_agent.server import build_mcp
 
 
 def test_mcp_tool_surface_is_small():

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_jupyter import __version__
+from jupyter_mcp_agent import __version__
 
 
 def stable_tool_ok_body(body: dict[str, Any]) -> dict[str, Any]:

@@ -8,7 +8,7 @@ import nbformat as nbfmt
 import nbformat.v4 as nbf
 import pytest
 
-from llm_jupyter.session import KernelSession
+from jupyter_mcp_agent.session import KernelSession
 
 
 def test_variable_preview_names_strict_rejects_bad_identifiers(tmp_path: Path) -> None:

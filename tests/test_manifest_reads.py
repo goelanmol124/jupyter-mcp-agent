@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from llm_jupyter.manifest import (
+from jupyter_mcp_agent.manifest import (
     explain_manifest_miss_for_run_id,
     manifest_records_for_notebook,
     manifest_records_for_run,

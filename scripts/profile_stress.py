@@ -122,7 +122,7 @@ def scenario_mega_stdout(nb: Path, sess_for: Callable[[Path], Any], n_chars: int
         "print('err_tail', file=sys.stderr)\n"
     )
     _write_nb(nb, [nbf.new_code_cell("_warm = 42\n"), nbf.new_code_cell(mega_body)])
-    from llm_jupyter.notebook import load_notebook_ensuring_cell_ids
+    from jupyter_mcp_agent.notebook import load_notebook_ensuring_cell_ids
 
     nb2, _ = load_notebook_ensuring_cell_ids(nb)
     warm_id = str(nb2.cells[0]["metadata"]["cell_id"])
@@ -163,7 +163,7 @@ except Exception as e:
     print("SKIP_MPL", repr(e))
 """
     _write_nb(nb, [nbf.new_code_cell("_warm = True\n"), nbf.new_code_cell(mpl_code)])
-    from llm_jupyter.notebook import ensure_cell_ids, load_notebook
+    from jupyter_mcp_agent.notebook import ensure_cell_ids, load_notebook
 
     ensure_cell_ids(load_notebook(nb), persist_path=nb)
     nb2 = load_notebook(nb)
@@ -246,7 +246,7 @@ def scenario_variable_preview_batch(nb: Path, sess_for: Callable[[Path], Any]) -
 
 def scenario_execution_plan_hot_path(nb: Path, sess_for: Callable[[Path], Any], n: int) -> None:
     _write_nb(nb, [nbf.new_code_cell("1+1")])
-    from llm_jupyter.notebook import ensure_cell_ids, load_notebook
+    from jupyter_mcp_agent.notebook import ensure_cell_ids, load_notebook
 
     ensure_cell_ids(load_notebook(nb), persist_path=nb)
     sess = sess_for(nb)
@@ -265,7 +265,7 @@ def scenario_execution_plan_hot_path(nb: Path, sess_for: Callable[[Path], Any], 
 
 
 def scenario_cells_apply(nb: Path, sess_for: Callable[[Path], Any]) -> None:
-    from llm_jupyter.notebook import ensure_cell_ids, load_notebook
+    from jupyter_mcp_agent.notebook import ensure_cell_ids, load_notebook
 
     _write_nb(nb, [nbf.new_code_cell("x = 0\n")])
     ensure_cell_ids(load_notebook(nb), persist_path=nb)
@@ -288,7 +288,7 @@ def scenario_cells_apply(nb: Path, sess_for: Callable[[Path], Any]) -> None:
 
 
 def scenario_notebook_validate_persist_large(root: Path, default_nb: Path) -> None:
-    from llm_jupyter.server import build_mcp
+    from jupyter_mcp_agent.server import build_mcp
 
     big_nb = root / "validate_big.ipynb"
     big = "\n".join(f"# section {i}\nprint({i})" for i in range(200))
@@ -320,7 +320,7 @@ def scenario_notebook_validate_persist_large(root: Path, default_nb: Path) -> No
 
 def main() -> None:
     _ensure_path()
-    from llm_jupyter.session import KernelSession
+    from jupyter_mcp_agent.session import KernelSession
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(

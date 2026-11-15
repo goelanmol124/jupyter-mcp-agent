@@ -88,7 +88,7 @@ def sources_concat_sha256_prefix(nb: nbformat.NotebookNode, *, prefix_len: int =
     Uses the same LF + trailing-whitespace normalization as companion drift checks.
     """
     # Local import avoids circular imports if companion pulls notebook helpers.
-    from llm_jupyter.companion import normalize_source
+    from jupyter_mcp_agent.companion import normalize_source
 
     chunks: list[str] = []
     for cell in nb.cells:

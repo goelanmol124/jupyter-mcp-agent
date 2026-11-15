@@ -10,23 +10,23 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-from llm_jupyter import __version__ as _LMJ_VERSION
-from llm_jupyter.cells_apply_helpers import CellsApplyEditItem
-from llm_jupyter.envelopes import stable_tool_error, stable_tool_error_with_extras
-from llm_jupyter.notebook import (
+from jupyter_mcp_agent import __version__ as _LMJ_VERSION
+from jupyter_mcp_agent.cells_apply_helpers import CellsApplyEditItem
+from jupyter_mcp_agent.envelopes import stable_tool_error, stable_tool_error_with_extras
+from jupyter_mcp_agent.notebook import (
     ensure_cell_ids,
     load_notebook,
     save_notebook,
     try_validate_notebook_file,
 )
-from llm_jupyter.paths import normalize_allowed_path
-from llm_jupyter.session import (
+from jupyter_mcp_agent.paths import normalize_allowed_path
+from jupyter_mcp_agent.session import (
     KernelSession,
     NotebookConcurrentBusy,
     kernel_cwd_policy,
     notebook_exclusive_lock_timeout_seconds,
 )
-from llm_jupyter.stamp import notebook_file_stamp
+from jupyter_mcp_agent.stamp import notebook_file_stamp
 
 
 def _tool_exception_traceback_text(exc: BaseException) -> str:
@@ -48,7 +48,7 @@ def _kernel_tool_envelope(tool_result: dict[str, object]) -> dict[str, object]:
 
 
 # Canonical `mcpServers` key used in repo `.cursor/mcp.json` — matches Cursor MCP UI identifier.
-_CURSOR_MCP_REGISTRY_KEY = "llm-jupyter"
+_CURSOR_MCP_REGISTRY_KEY = "jupyter-mcp-agent"
 
 PROCESS_SESSION_ID = str(_uuid.uuid4())
 
@@ -107,9 +107,9 @@ def _notebook_exclusive_busy(tool: str, exc: NotebookConcurrentBusy) -> dict[str
 
 def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: str) -> FastMCP:
     mcp = FastMCP(
-        name="llm-jupyter",
+        name="jupyter-mcp-agent",
         instructions=(
-            "llm-jupyter MCP: pooled ipykernel per notebook_path; reuse the same path on run and kernel_*.\n\n"
+            "jupyter-mcp-agent MCP: pooled ipykernel per notebook_path; reuse the same path on run and kernel_*.\n\n"
             "- server_info lists tool_names and process_session_id (authoritative).\n"
             "- notebook_execution_plan with no selectors returns structural_probe; pass exactly one of cell_id, "
             "run_all=true, or run_until_cell_id to preview the same indices run would execute.\n"

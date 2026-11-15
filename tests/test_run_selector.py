@@ -9,13 +9,13 @@ import pytest
 def test_contradictory_run_modes_raises(tmp_path: Path):
     import nbformat as nbfmt
 
-    from llm_jupyter.session import KernelSession
+    from jupyter_mcp_agent.session import KernelSession
 
     p = tmp_path / "x.ipynb"
     nb = nbf.new_notebook(cells=[nbf.new_code_cell("1"), nbf.new_code_cell("2")])
     nbfmt.write(nb, open(p, "w", encoding="utf-8"))
 
-    from llm_jupyter.notebook import ensure_cell_ids, load_notebook
+    from jupyter_mcp_agent.notebook import ensure_cell_ids, load_notebook
 
     ensure_cell_ids(load_notebook(p), persist_path=p)
     nb3 = nbfmt.read(open(p, encoding="utf-8"), as_version=4)
@@ -35,13 +35,13 @@ def test_run_lookuperror_includes_resolved_notebook_path(tmp_path: Path):
     import nbformat as nbfmt
     import nbformat.v4 as nbf
 
-    from llm_jupyter.session import KernelSession
+    from jupyter_mcp_agent.session import KernelSession
 
     p = tmp_path / "pathhint.ipynb"
     nb = nbf.new_notebook(cells=[nbf.new_code_cell("1")])
     nbfmt.write(nb, open(p, "w", encoding="utf-8"))
 
-    from llm_jupyter.notebook import ensure_cell_ids, load_notebook
+    from jupyter_mcp_agent.notebook import ensure_cell_ids, load_notebook
 
     ensure_cell_ids(load_notebook(p), persist_path=p)
 
@@ -57,8 +57,8 @@ def test_resolve_run_targets_without_kernel(tmp_path: Path) -> None:
     import nbformat as nbfmt
     import nbformat.v4 as nbf
 
-    from llm_jupyter.notebook import ensure_cell_ids, load_notebook
-    from llm_jupyter.session import KernelSession
+    from jupyter_mcp_agent.notebook import ensure_cell_ids, load_notebook
+    from jupyter_mcp_agent.session import KernelSession
 
     p = tmp_path / "plan.ipynb"
     nb = nbf.new_notebook(
@@ -86,7 +86,7 @@ def test_resolve_run_targets_without_kernel(tmp_path: Path) -> None:
 def test_notebook_without_code_cells_allows_no_selector(tmp_path: Path):
     import nbformat as nbfmt
 
-    from llm_jupyter.session import KernelSession
+    from jupyter_mcp_agent.session import KernelSession
 
     p = tmp_path / "only_md.ipynb"
     nb = nbf.new_notebook(cells=[nbf.new_markdown_cell("# hi")])
@@ -104,8 +104,8 @@ def test_notebook_without_code_cells_allows_no_selector(tmp_path: Path):
 def test_bulk_exclude_skips_probe_in_run_all_plan(tmp_path: Path) -> None:
     import nbformat as nbfmt
 
-    from llm_jupyter.notebook import ensure_cell_ids, load_notebook
-    from llm_jupyter.session import KernelSession
+    from jupyter_mcp_agent.notebook import ensure_cell_ids, load_notebook
+    from jupyter_mcp_agent.session import KernelSession
 
     probe = nbf.new_code_cell("probe")
     probe.metadata["llm_jupyter"] = {"exclude_from_bulk": True}

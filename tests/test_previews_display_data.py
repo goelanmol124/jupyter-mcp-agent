@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import nbformat.v4 as nbf
 
-from llm_jupyter.previews import previews_from_cells
+from jupyter_mcp_agent.previews import previews_from_cells
 
 
 def test_previews_pick_text_plain_from_display_data() -> None:

@@ -6,7 +6,7 @@ import nbformat.v4 as nbf
 import nbformat as nbfmt
 import pytest
 
-from llm_jupyter.session import KernelSession, NotebookConcurrentBusy
+from jupyter_mcp_agent.session import KernelSession, NotebookConcurrentBusy
 
 
 def test_notebook_exclusive_nonblocking_raises_when_busy(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

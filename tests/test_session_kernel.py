@@ -5,8 +5,8 @@ from pathlib import Path
 import nbformat.v4 as nbf
 import pytest
 
-from llm_jupyter.notebook import ensure_cell_ids, load_notebook
-from llm_jupyter.session import KernelSession
+from jupyter_mcp_agent.notebook import ensure_cell_ids, load_notebook
+from jupyter_mcp_agent.session import KernelSession
 
 
 @pytest.mark.kernel

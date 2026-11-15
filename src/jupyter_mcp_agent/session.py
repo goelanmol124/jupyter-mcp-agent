@@ -18,14 +18,14 @@ from jupyter_client import KernelManager
 from nbclient import NotebookClient
 from nbclient.exceptions import CellExecutionError
 
-from llm_jupyter.companion_messaging import (
+from jupyter_mcp_agent.companion_messaging import (
     COMPANION_MIRROR_STALE_HINT,
     COMPANION_SKIPPED_NOTE,
     COMPANION_STRICT_MISSING,
     NOTEBOOK_EDIT_PERSISTED_VS_KERNEL_HINT,
 )
-from llm_jupyter.env_snapshot import env_snapshot_ttl_meta_from_snapshot, python_env_snapshot
-from llm_jupyter.chunks import (
+from jupyter_mcp_agent.env_snapshot import env_snapshot_ttl_meta_from_snapshot, python_env_snapshot
+from jupyter_mcp_agent.chunks import (
     MAX_KERNEL_ERROR_LOG_ENTRIES,
     STREAM_SUFFIX_DESCRIPTOR,
     append_kernel_traceback_stderr,
@@ -37,19 +37,19 @@ from llm_jupyter.chunks import (
     strip_ansi_text,
     trim_streams_by_cell,
 )
-from llm_jupyter.companion import (
+from jupyter_mcp_agent.companion import (
     companion_path_for_notebook,
     companion_yaml_paths_for_notebook,
     default_companion_path_for_notebook,
     validate_companion_file,
 )
-from llm_jupyter.manifest import append_manifest
-from llm_jupyter.notebook_cells_patch import (
+from jupyter_mcp_agent.manifest import append_manifest
+from jupyter_mcp_agent.notebook_cells_patch import (
     apply_notebook_cells_patch,
     normalize_patch_operations,
     notebook_cells_summary,
 )
-from llm_jupyter.notebook import (
+from jupyter_mcp_agent.notebook import (
     bulk_eligible_code_indices,
     cell_index_for_id,
     cell_index_for_stable_id,
@@ -63,10 +63,10 @@ from llm_jupyter.notebook import (
     validate_notebook_node,
 )
 
-from llm_jupyter.paths import allowed_roots_for_notebook, is_under_roots, normalize_allowed_path
-from llm_jupyter.previews import previews_from_cells
-from llm_jupyter.stamp import notebook_file_stamp
-from llm_jupyter.stream_artifacts import (
+from jupyter_mcp_agent.paths import allowed_roots_for_notebook, is_under_roots, normalize_allowed_path
+from jupyter_mcp_agent.previews import previews_from_cells
+from jupyter_mcp_agent.stamp import notebook_file_stamp
+from jupyter_mcp_agent.stream_artifacts import (
     evidence_root_for_notebook,
     mcp_stream_char_budget,
     write_run_stream_artifacts,
@@ -149,7 +149,7 @@ def _variable_preview_stdout_blob(so_txt: str) -> str:
 class NotebookConcurrentBusy(RuntimeError):
     """Exclusive access to one ``.ipynb`` is unavailable (another tool call holds the notebook lock).
 
-    MCP clients sometimes issue parallel requests; llm-jupyter serializes notebook-scoped work per path.
+    MCP clients sometimes issue parallel requests; jupyter-mcp-agent serializes notebook-scoped work per path.
     Set ``LLM_JUPYTER_NOTEBOOK_LOCK_TIMEOUT_SEC`` to empty or ``inf`` to queue indefinitely instead of timing out.
 
     Structured fields propagate to MCP tool ``status:error`` payloads via ``_notebook_exclusive_busy``.
@@ -174,7 +174,7 @@ class NotebookConcurrentBusy(RuntimeError):
 KERNEL_TOOL_FIELD_HINTS: dict[str, str] = {
     "kernel_alive": "ipykernel subprocess is running (False if exited or never started on this pooled handle slot).",
     "notebook_kernel_active": (
-        "True when llm-jupyter holds a pooled kernel session slot for this notebook path "
+        "True when jupyter-mcp-agent holds a pooled kernel session slot for this notebook path "
         "(a NotebookKernelHandle); the subprocess may still be dead until restarted—see kernel_alive."
     ),
     "kernel_generation": "Monotonic bump on kernel (re)start for this notebook in this MCP process.",
@@ -220,7 +220,7 @@ def ansi_streams_strip_requested(explicit_strip: bool) -> bool:
 
 def _server_tool_digest() -> dict[str, str]:
     """Stable metadata echoed on MCP replies so agents detect wrong interpreter/path."""
-    from llm_jupyter import __version__ as ver
+    from jupyter_mcp_agent import __version__ as ver
 
     return {"llm_jupyter_version": ver}
 
@@ -440,7 +440,7 @@ class KernelSession:
         elif timeout_sec <= 0:
             if not lk.acquire(blocking=False):
                 raise NotebookConcurrentBusy(
-                    f"Notebook-exclusive lock busy for {canon}: another llm-jupyter tool is "
+                    f"Notebook-exclusive lock busy for {canon}: another jupyter-mcp-agent tool is "
                     f"already running against this path. Serialize MCP calls for the same .ipynb, "
                     f"or set {_NOTEBOOK_EXCLUSIVE_LOCK_ENV} empty/inf for a blocking queue.",
                     exclusive_notebook_resolved=str(canon),
@@ -753,7 +753,7 @@ class KernelSession:
         validate_first: bool = True,
     ) -> dict[str, Any]:
         """Apply deterministic code-cell edits by ``cell_id``; saves the notebook and returns a stamp."""
-        from llm_jupyter.cells_apply_helpers import normalize_edits
+        from jupyter_mcp_agent.cells_apply_helpers import normalize_edits
 
         nb_path_arg = notebook_path or (str(self.default_notebook) if self.default_notebook else "")
         if not str(nb_path_arg).strip():

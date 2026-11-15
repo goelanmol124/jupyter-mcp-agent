@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from llm_jupyter.chunks import (
+from jupyter_mcp_agent.chunks import (
     append_kernel_traceback_stderr,
     cell_stream_row,
     chunk_text,

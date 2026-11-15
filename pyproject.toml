@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llm-jupyter"
+name = "jupyter-mcp-agent"
 version = "0.3.0"
 description = "MCP server for ipykernel Jupyter notebooks (.ipynb) with truthful run metadata"
 readme = "README.md"
@@ -36,7 +36,9 @@ dev = ["pytest>=8.0", "watchfiles>=0.21"]
 release = ["build>=1.2", "twine>=5.0"]
 
 [project.scripts]
-llm-jupyter = "llm_jupyter.cli:main"
+jupyter-mcp-agent = "jupyter_mcp_agent.cli:main"
+# Backwards-compatible alias for the pre-0.3.1 name.
+llm-jupyter = "jupyter_mcp_agent.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

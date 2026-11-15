@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Exercise the SAME tool callables as llm-jupyter stdio MCP (build_mcp + ToolManager).
+Exercise the SAME tool callables as jupyter-mcp-agent stdio MCP (build_mcp + ToolManager).
 
 This is how the agent validates the MCP layer without Cursor's MCP transport.
-After adding .cursor/mcp.json, reload Cursor so tools appear under the llm-jupyter server.
+After adding .cursor/mcp.json, reload Cursor so tools appear under the jupyter-mcp-agent server.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def _warn_roots(nb: Path, roots: list[Path]) -> None:
 
 
 def list_code_cell_ids(notebook: Path) -> None:
-    from llm_jupyter.notebook import ensure_cell_ids, indices_of_code_cells, load_notebook
+    from jupyter_mcp_agent.notebook import ensure_cell_ids, indices_of_code_cells, load_notebook
 
     ensure_cell_ids(load_notebook(notebook), persist_path=notebook)
     nb = load_notebook(notebook)
@@ -128,7 +128,7 @@ async def invoke_tool(
     nb: Path,
     roots: list[Path],
 ):
-    from llm_jupyter.server import build_mcp
+    from jupyter_mcp_agent.server import build_mcp
 
     mcp = build_mcp(nb, roots, "explore")
     tm = mcp._tool_manager
@@ -148,7 +148,7 @@ async def invoke_session(
     companion_strict: bool,
 ):
     """Keep one build_mcp / kernel across multiple tool calls (run -> preview)."""
-    from llm_jupyter.server import build_mcp
+    from jupyter_mcp_agent.server import build_mcp
 
     mcp = build_mcp(nb, roots, "explore")
     tm = mcp._tool_manager
@@ -199,7 +199,7 @@ async def async_main(
 
 def main() -> None:
     p = argparse.ArgumentParser(
-        description="Call llm-jupyter MCP-style tools from the repo.",
+        description="Call jupyter-mcp-agent MCP-style tools from the repo.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
@@ -212,7 +212,7 @@ def main() -> None:
             "      run:run_all=true variable_preview:names=x,y\n"
             "  # Or the dedicated helper (no agent_report stamp):\n"
             "  python scripts/mcp_session_run_preview.py --roots . -n path/to/work.ipynb --names x,y\n"
-            "  python -m llm_jupyter manifest-tail demos/notebook.ipynb --run-id RUN_ID_HERE\n"
+            "  python -m jupyter_mcp_agent manifest-tail demos/notebook.ipynb --run-id RUN_ID_HERE\n"
             "  python scripts/agent_mcp_selftest.py -n demos/agent_scratch.ipynb --companion-strict run run_all=true\n"
             "    ^ fails when same-stem .apynb is missing.\n"
         ),

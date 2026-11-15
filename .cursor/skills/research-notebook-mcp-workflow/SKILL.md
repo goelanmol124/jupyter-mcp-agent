@@ -11,23 +11,23 @@ description: >-
 
 # Research Notebook MCP — agent workflow
 
-## Current MCP server (repo `llm_jupyter`): what exists today
+## Current MCP server (package `jupyter_mcp_agent`): what exists today
 
 - Tools include **`run`**, **`kernel_*`**, **`clear_outputs`**, **`notebook_validate`**, **`notebook_execution_plan`**, **`cells_apply`**, **`notebook_cells_patch`**, **`variable_preview`**, **`server_info`**. Optional **`.apynb`** sidecar (same stem as the `.ipynb`): when that file exists, **`run`** cross-checks code-cell sources and `metadata.cell_id` before executing; use **`companion_strict=true`** to require a sidecar.
 
-- With the repo’s **project-level MCP file** `.cursor/mcp.json` (see README): project key may be **`llm-jupyter-project`** (avoids colliding with user-scope `llm-jupyter` → live catalog id **`user-llm-jupyter`**). **Reload / enable** the project entry if you need it; for agent work, ready **`user-llm-jupyter`** is enough — otherwise run `python scripts/agent_mcp_selftest.py …` from the repo root.
-- **I5 / Cursor catalog:** treat ready **`user-llm-jupyter`** (or `llm-jupyter` / `llm-jupyter-project` if present) as Cursor MCP. Only if `GetMcpTools` has **no** ready `*llm-jupyter*` server, label **`tools_selftest`** and move on. Do **not** re-list “Cursor absent” when `user-llm-jupyter` is ready. Human RELOAD / enable for project entry: `exp_C/s2/RELOAD_SMOKE.md` + `exp_C/s5/CROSS_EXP_TRANSPORT.md`. Agents cannot fix host registration.
+- With the repo’s **project-level MCP file** `.cursor/mcp.json` (see README): project key may be **`jupyter-mcp-agent-project`** (avoids colliding with user-scope `jupyter-mcp-agent` → live catalog id **`user-jupyter-mcp-agent`**). **Reload / enable** the project entry if you need it; for agent work, ready **`user-jupyter-mcp-agent`** is enough — otherwise run `python scripts/agent_mcp_selftest.py …` from the repo root.
+- **I5 / Cursor catalog:** treat ready **`user-jupyter-mcp-agent`** (or `jupyter-mcp-agent` / `jupyter-mcp-agent-project` if present) as Cursor MCP. Only if `GetMcpTools` has **no** ready `*jupyter-mcp-agent*` server, label **`tools_selftest`** and move on. Do **not** re-list “Cursor absent” when `user-jupyter-mcp-agent` is ready. Human RELOAD / enable for project entry: `exp_C/s2/RELOAD_SMOKE.md` + `exp_C/s5/CROSS_EXP_TRANSPORT.md`. Agents cannot fix host registration.
 - **Selftest roots (required for matrix / cross-tree notebooks):** always pass workspace roots so trial dirs under `benchmarks/` (or anywhere outside the default notebook parent) are allowed:
   - `python scripts/agent_mcp_selftest.py --roots . -n <nb> …` **or**
   - `LLM_JUPYTER_ROOTS=<workspace>` (os.pathsep-separated; same as `serve`)
   - Before `run`, call **`server_info`** and assert the trial path is under **`effective_allowed_roots`** (and prefer non-empty **`extra_roots_resolved`** when you passed `--roots` / env).
   - Quick operator card: `benchmarks/v04_agent_matrix/_orchestrator/exp_C/AGENT_CHECKLIST.md`.
-- **Cursor primary path:** `GetMcpTools` → `CallMcpTool` on ready `user-llm-jupyter` (or other `*llm-jupyter*`). Reuse the same `notebook_path` for `run` → `variable_preview` (one kernel). CLI selftest / `mcp_session_run_preview.py` is fallback — label `tools_selftest`; do not claim `tools_cursor_mcp`.
+- **Cursor primary path:** `GetMcpTools` → `CallMcpTool` on ready `user-jupyter-mcp-agent` (or other `*jupyter-mcp-agent*`). Reuse the same `notebook_path` for `run` → `variable_preview` (one kernel). CLI selftest / `mcp_session_run_preview.py` is fallback — label `tools_selftest`; do not claim `tools_cursor_mcp`.
 - **Same-session:** see Gap2 — CallMcpTool same `notebook_path`, or CLI `mcp_session_run_preview` / `--session`.
 - **Path semantics in MCP:** **`notebook_path`** is resolved with `Path(...).resolve()` vs the server process **`cwd`** (recommended: **`"${workspaceFolder}"`** in `.cursor/mcp.json`). Omitting `notebook_path` targets the server's default **`--notebook`/`-n`**. When introducing a fresh **`.apynb`**, do **`export-apynb` → `companion_validate` → `run`** in order—the first leg must finish before validating, or `"skipped"` can appear while the filesystem catches up with relative paths.
 - **Kernel cwd:** New ipykernels start with **cwd = notebook parent** by default (`server_info.kernel_cwd_policy=notebook_parent`), so relative `data.npz` / plots next to the `.ipynb` work even when `process_cwd` is `%USERPROFILE%`/repo. Opt out: `LLM_JUPYTER_KERNEL_CWD=process` or `serve --kernel-cwd process`. `process_cwd` remains the MCP server process cwd (set via `LLM_JUPYTER_PROCESS_CWD` / `--process-cwd` when Cursor ignores mcp.json `cwd`). After `run` / `kernel_restart`, see `kernel_status.kernel_cwd`.
 - **`run`** requires **exactly one** intent: **`cell_id`**, **`run_all=true`**, or **`run_until_cell_id`**. Passing more than one is an error (avoids silent “`cell_id` wins” bugs).
-- Every execution returns **`run_id`** and appends it to **`manifest.jsonl`** next to the notebook—**cite `run_id` in chat** when you want durable cross-turn memory of a specific execute. **Shell:** `python -m llm_jupyter manifest-tail path/to/analysis.ipynb` (recent rows) or add **`--run-id …`** after you cite one run in chat (same notebook filter still applies). If `--run-id` matches nothing, the CLI prints a short **stderr** explanation (stdout stays JSON for piping).
+- Every execution returns **`run_id`** and appends it to **`manifest.jsonl`** next to the notebook—**cite `run_id` in chat** when you want durable cross-turn memory of a specific execute. **Shell:** `python -m jupyter_mcp_agent manifest-tail path/to/analysis.ipynb` (recent rows) or add **`--run-id …`** after you cite one run in chat (same notebook filter still applies). If `--run-id` matches nothing, the CLI prints a short **stderr** explanation (stdout stays JSON for piping).
 
 ## Mindset: R&D, not shipping
 
@@ -72,7 +72,7 @@ When a simple fix (honest prep, per-group models, dropping a leak) cuts error sh
 
 | # | Gap | Do this |
 |---|-----|---------|
-| 1 | No ready `*llm-jupyter*` in catalog | Label **`tools_selftest`**. Ready **`user-llm-jupyter`** counts as Cursor. Project key may be **`llm-jupyter-project`** (human enable/RELOAD). Cite CROSS_EXP_TRANSPORT; do not invent a new “tool gap” every pack. |
+| 1 | No ready `*jupyter-mcp-agent*` in catalog | Label **`tools_selftest`**. Ready **`user-jupyter-mcp-agent`** counts as Cursor. Project key may be **`jupyter-mcp-agent-project`** (human enable/RELOAD). Cite CROSS_EXP_TRANSPORT; do not invent a new “tool gap” every pack. |
 | 2 | One-shot selftest = new kernel | Use **CallMcpTool** with the same `notebook_path`, or CLI **`scripts/mcp_session_run_preview.py`** / **`agent_mcp_selftest.py --session`**, for `run`→`variable_preview`. |
 | 3 | Kernel cwd / relative paths | Confirm `kernel_cwd_policy` / `kernel_cwd`; abs path if load fails (R013). |
 
@@ -85,9 +85,9 @@ When a simple fix (honest prep, per-group models, dropping a leak) cuts error sh
 
 ## MCP usage habits
 
-- Prefer editing in Cursor’s notebook UI; optional **`.apynb`** JSON (`companion_version`, `cells` with `cell_id` + `source` per **code cell in order**) is for agents and scripts—keep it in sync with the notebook or validation fails before **`run`**. **`companion_validate`** checks drift without executing. Refresh the sidecar after UI-only edits: **`python -m llm_jupyter export-apynb path/to/analysis.ipynb`**.
+- Prefer editing in Cursor’s notebook UI; optional **`.apynb`** JSON (`companion_version`, `cells` with `cell_id` + `source` per **code cell in order**) is for agents and scripts—keep it in sync with the notebook or validation fails before **`run`**. **`companion_validate`** checks drift without executing. Refresh the sidecar after UI-only edits: **`python -m jupyter_mcp_agent export-apynb path/to/analysis.ipynb`**.
 - Prefer **`run_all`** or **`run_until`** when reproducibility of the chain matters; note **`explore`** vs **`record`** when conclusions or shared figures matter (use `suggested_figure_prefix` / `LLM_NB_ART_PREFIX` when recording — see `exp_C/AGENT_CHECKLIST.md`).
-- **Transport labels:** claim `tools_cursor_mcp` only after catalog shows a ready **`user-llm-jupyter`** (or `llm-jupyter` / `llm-jupyter-project`) **and** a Cursor-invoked `server_info` smoke; else use selftest/`build_mcp` and label **`tools_selftest`**. Scripted stamp waves: **`scripted_selftest`**. Do not silent-nbconvert on `PermissionError` without labeling **`local_fallback`**.
+- **Transport labels:** claim `tools_cursor_mcp` only after catalog shows a ready **`user-jupyter-mcp-agent`** (or `jupyter-mcp-agent` / `jupyter-mcp-agent-project`) **and** a Cursor-invoked `server_info` smoke; else use selftest/`build_mcp` and label **`tools_selftest`**. Scripted stamp waves: **`scripted_selftest`**. Do not silent-nbconvert on `PermissionError` without labeling **`local_fallback`**.
 - **Selftest CLI:** `python scripts/agent_mcp_selftest.py -n path/to.ipynb TOOL key=value` (positional tool name; not `--tool`).
 - **One kernel session:** see Gap2.
 - **Qualifying previews:** after a structural win, preview **middle-state / residual / regime** names (`resid_*`, scores, cohort frames)—not dtype dumps of `X_train`/`y_train`. Count alone ≠ forensics.

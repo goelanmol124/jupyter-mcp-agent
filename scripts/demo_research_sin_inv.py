@@ -9,7 +9,7 @@ from pathlib import Path
 import nbformat
 import nbformat.v4 as nbf
 
-from llm_jupyter.session import KernelSession
+from jupyter_mcp_agent.session import KernelSession
 
 
 def main() -> None:

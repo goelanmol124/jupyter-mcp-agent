@@ -26,8 +26,8 @@ def run_harness() -> None:
     if src.is_dir() and str(src) not in sys.path:
         sys.path.insert(0, str(src))
 
-    from llm_jupyter.notebook import ensure_cell_ids, load_notebook
-    from llm_jupyter.session import KernelSession
+    from jupyter_mcp_agent.notebook import ensure_cell_ids, load_notebook
+    from jupyter_mcp_agent.session import KernelSession
 
     d = tempfile.mkdtemp(prefix="lj_prof_")
     nb_path = Path(d) / "prof.ipynb"
