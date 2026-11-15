@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.1] - 2026-11-15
+
+### Changed
+
+- **Renamed** the project from `llm-jupyter` to **`jupyter-mcp-agent`**: distribution `jupyter-mcp-agent`, import package `jupyter_mcp_agent`, console script `jupyter-mcp-agent`, MCP server name `jupyter-mcp-agent`.
+- **Backwards compatible:** `import llm_jupyter[.submodule]`, `python -m llm_jupyter` and the `llm-jupyter` console script remain as aliases. `LLM_JUPYTER_*` env vars, `metadata.llm_jupyter`, the `.llm_jupyter/` evidence folder and the `llm_jupyter_version` reply field are unchanged.
+- New ipykernels start with **cwd = notebook parent** by default, so relative `data.npz` / plot paths resolve next to the `.ipynb` (`LLM_JUPYTER_KERNEL_CWD=process` / `serve --kernel-cwd process` restores the old behaviour). `server_info` and `kernel_restart` report `kernel_cwd` / `kernel_cwd_policy`.
+- Repository layout: `demos/` split into `examples/` (small agent demos) and `benchmarks/case_studies/` (MCP vs no-MCP research notebooks); `experiments/` folded into the latter.
+- README rewritten (Claude Code / Claude Desktop / Cursor setup, features, architecture); `.gitignore` hardened (secrets, caches, scratch output).
+
+### Added
+
+- `serve --process-cwd` / `LLM_JUPYTER_PROCESS_CWD` (chdir before serving, for MCP hosts that ignore `cwd`).
+- `scripts/agent_mcp_selftest.py` honours `--roots` / `LLM_JUPYTER_ROOTS` and supports multi-step sessions; new `scripts/mcp_session_run_preview.py` (same-process `server_info -> run -> variable_preview`).
+
 ## [0.3.0] — 2026-05-03
 
 ### Breaking (MCP)

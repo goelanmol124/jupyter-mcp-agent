@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jupyter-mcp-agent"
-version = "0.3.0"
-description = "MCP server for ipykernel Jupyter notebooks (.ipynb) with truthful run metadata"
+version = "0.3.1"
+description = "MCP server that lets AI coding agents run and edit Jupyter notebooks on a real ipykernel, with truthful run metadata"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
-keywords = ["mcp", "jupyter", "notebook", "ipykernel", "llm", "agent"]
+keywords = ["mcp", "model-context-protocol", "mcp-server", "jupyter", "notebook", "ipykernel", "llm", "ai-agent", "claude"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -30,6 +30,11 @@ dependencies = [
     "Pillow>=10.0",
     "PyYAML>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/goelanmol124/jupyter-mcp-agent"
+Issues = "https://github.com/goelanmol124/jupyter-mcp-agent/issues"
+Changelog = "https://github.com/goelanmol124/jupyter-mcp-agent/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "watchfiles>=0.21"]

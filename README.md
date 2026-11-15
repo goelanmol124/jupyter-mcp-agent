@@ -1,120 +1,167 @@
 # jupyter-mcp-agent
 
-Open-source **Python MCP** server for **`ipykernel`** notebooks: **`run`** (single cell, **`run_all`**, or **`run_until`**, with **`halt_on_error`**), **`explore`** vs **`record`** modes, execution JSON (notebook file stamp, Python env snapshot, stdout/stderr chunked the same way, small previews), append-only **`manifest.jsonl`**.
+**An MCP server that lets AI coding agents run and edit Jupyter notebooks on a real ipykernel and report exactly what ran.**
 
-**Cursor:** always-on rule [.cursor/rules/research-notebook-mcp-agent.mdc](.cursor/rules/research-notebook-mcp-agent.mdc); workflow skill [.cursor/skills/research-notebook-mcp-workflow/SKILL.md](.cursor/skills/research-notebook-mcp-workflow/SKILL.md).
+`jupyter-mcp-agent` is a Python [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server for `.ipynb` notebooks. An AI coding agent (Claude Code, Claude Desktop, Cursor, or any other MCP client) can run one cell, run all cells, or run up to a given cell. It can also edit cells, preview variables and restart or interrupt the kernel. Each call gets back structured JSON: a `run_id`, a notebook file stamp, an environment snapshot, chunked stdout/stderr and small previews. Every run is also appended to a `manifest.jsonl` file beside the notebook, so a person can check afterwards what the agent actually ran.
 
-Project-level MCP registration: **[`.cursor/mcp.json`](.cursor/mcp.json)** (targets [`demos/agent_scratch.ipynb`](demos/agent_scratch.ipynb); **`cwd`**: `${workspaceFolder}` so **`args -n demos/…`** resolves from the repo root). **Reload Cursor** after changing MCP config so the `jupyter-mcp-agent` server appears; before reload, the assistant only has other MCP servers (for example the browser tools in this environment).
+> Formerly named `llm-jupyter`. The old import path (`llm_jupyter`), `python -m llm_jupyter` and the `llm-jupyter` command still work as aliases.
 
-**Manual same-as-MCP calls** (stdio handlers, no IDE bridge):
+## Why
+
+Research and data work is iterative: change a small piece of code, run it, look at numbers and plots, revise. Notebooks fit that loop, but agents usually either rewrite whole scripts or drive a full Jupyter server through a browser-shaped API. This server gives a notebook agent a small, predictable set of actions on a real kernel. Results are written to disk (the `.ipynb`, figures, the run manifest), not just into the chat, so they can be checked later. The design notes are in [docs/PRD.md](docs/PRD.md) and [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md).
+
+## Features
+
+- **Real ipykernel execution:** one pooled kernel per notebook path. Run modes are `cell_id`, `run_all` and `run_until_cell_id`, with `halt_on_error`.
+- **Trustworthy run metadata:** a `run_id`, notebook file stamp, sources hash, Python env snapshot and kernel generation on every reply. Runs are logged append-only to `manifest.jsonl`. `explore` and `record` modes are available.
+- **Notebook editing:** `cells_apply` (code-cell source edits) and `notebook_cells_patch` (insert, delete, move or set source, applied as one batch). Edits are serialised per notebook with an exclusive lock.
+- **Inspection without blowing the context window:** capped `variable_preview`, chunked streams, and `execute_result`/`display_data` previews. Oversized output spills to `.llm_jupyter/runs/<run_id>/`.
+- **Planning without a kernel:** `notebook_execution_plan` (structural map, companion `.apynb` sidecar checks) and `notebook_validate` (nbformat schema).
+- **Sandboxed paths:** writes stay inside the notebook's folder plus any extra `--roots` you allow.
+- **Host quirks handled:** `--process-cwd` covers MCP hosts that ignore `cwd`. Kernels start in the notebook's folder by default (`--kernel-cwd`).
+
+### MCP tools
+
+| Tool | Purpose |
+|------|---------|
+| `run` | Execute exactly one of `cell_id`, `run_all=true` or `run_until_cell_id`; returns `run_id` (also logged to `manifest.jsonl`) |
+| `notebook_execution_plan` | Structural notebook map + companion checks, no kernel |
+| `cells_apply` | Set the source of code cells by `cell_id` |
+| `notebook_cells_patch` | Ordered insert / delete / move / set_source ops in one batch |
+| `variable_preview` | Capped `repr` of named kernel variables |
+| `kernel_restart` / `kernel_interrupt` / `kernel_status` | Kernel lifecycle (`kernel_generation` bumps on restart) |
+| `clear_outputs` | Strip persisted outputs (optionally execution counts) |
+| `notebook_validate` | nbformat schema check; optionally persist cell ids |
+| `server_info` | No-kernel smoke test: version, tools, Python path, cwd, allowed roots |
+
+## Quick start
+
+Requires Python 3.10+.
 
 ```bash
-python scripts/agent_mcp_selftest.py run run_all=true
-python scripts/agent_mcp_selftest.py notebook_validate
-python -m jupyter_mcp_agent export-apynb path/to/notebook.ipynb   # (re)write same-stem `.apynb`
-python -m jupyter_mcp_agent manifest-tail path/to/notebook.ipynb   # last manifest records for that notebook
-python -m jupyter_mcp_agent manifest-tail path/to/notebook.ipynb --run-id abcdef123456   # one cited run_id (stderr hint if no match)
+git clone https://github.com/goelanmol124/jupyter-mcp-agent.git
+cd jupyter-mcp-agent
+pip install -e .            # or: pip install -e ".[dev]" for tests
+jupyter-mcp-agent serve --notebook /absolute/path/to/analysis.ipynb
 ```
 
-**Docs:** [PRD](docs/PRD.md) · [Implementation](docs/IMPLEMENTATION.md) · **License:** [MIT](LICENSE)
+`serve` speaks MCP over stdio, so normally your MCP client starts it for you (see below). Use an absolute notebook path unless the client's `cwd` is the notebook's folder.
 
-## Install
+### Claude Code
 
 ```bash
-pip install -e ".[dev]"
+claude mcp add jupyter -- jupyter-mcp-agent serve --notebook /absolute/path/to/analysis.ipynb
+# or, without installing the console script on PATH:
+claude mcp add jupyter -- python -m jupyter_mcp_agent serve -n /absolute/path/to/analysis.ipynb
 ```
 
-## Run (stdio MCP)
-
-```bash
-python -m jupyter_mcp_agent serve --notebook /absolute/path/to/analysis.ipynb --default-mode explore
-# or
-jupyter-mcp-agent serve -n /absolute/path/to/analysis.ipynb
-```
-
-**`.apynb` sidecar refresh** (mirror code cells next to validation / `run`):
-
-```bash
-python -m jupyter_mcp_agent export-apynb demos/agent_demo_beta.ipynb
-# or: jupyter-mcp-agent export-apynb path/to/analysis.ipynb -o path/to/other.apynb
-python -m jupyter_mcp_agent manifest-tail demos/agent_demo_markov.ipynb --last 8
-python -m jupyter_mcp_agent manifest-tail demos/agent_demo_ols.ipynb --run-id YOUR_RUN_ID
-```
-
-**Environment (optional):**
-
-| Variable | Meaning |
-|----------|---------|
-| `LLM_JUPYTER_NOTEBOOK` | Default `--notebook` |
-| `LLM_JUPYTER_MODE` | `explore` or `record` |
-| `LLM_JUPYTER_ROOTS` | Extra allowed directories (`os.pathsep`-separated); default sandbox is the notebook’s parent only when `--notebook` is set |
-| `LLM_JUPYTER_PROCESS_CWD` | `chdir` before `serve` (same as `--process-cwd`); use when the MCP host ignores mcp.json `cwd` (Cursor on Windows often starts in `%USERPROFILE%`) |
-| `LLM_NB_ART_PREFIX` | Passed into the kernel environment so saved figures can reuse a searchable prefix |
-
-**Cursor MCP config example** (`mcp.json`):
+Or commit a project-scoped `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "jupyter-mcp-agent": {
-      "command": "python",
-      "args": ["-m", "jupyter_mcp_agent", "serve", "-n", "C:\\path\\to\\notebook.ipynb"],
-      "cwd": "C:\\path\\to\\project"
+    "jupyter": {
+      "command": "jupyter-mcp-agent",
+      "args": ["serve", "--notebook", "notebooks/analysis.ipynb", "--roots", "."]
     }
   }
 }
 ```
 
-Use an **absolute** path for `-n` on Windows unless `cwd` is the notebook folder.
+### Claude Desktop
 
-## Tools
+Add to `claude_desktop_config.json` (Settings > Developer > Edit Config):
 
-| Tool | Purpose |
-|------|---------|
-| `run` | Execute **exactly one** of `cell_id`, `run_all=true`, or `run_until_cell_id`; response includes **`run_id`** (also in `manifest.jsonl`) |
-| `kernel_restart` / `kernel_interrupt` / `kernel_status` | Kernel lifecycle (`kernel_generation` bumps on restart) |
-| `clear_outputs` | Clear persisted outputs (optional `clear_execution_counts`) |
-| `notebook_validate` | `nbformat` schema check without running |
+```json
+{
+  "mcpServers": {
+    "jupyter": {
+      "command": "python",
+      "args": ["-m", "jupyter_mcp_agent", "serve", "-n", "C:\\path\\to\\analysis.ipynb"]
+    }
+  }
+}
+```
 
-**Security:** With `--notebook` set, writes are limited to that notebook path and its parent (plus `--roots`). Starting without `-n` only anchors each tool call’s path to itself—use `-n` in real projects.
+Use the full path to the Python interpreter that has the package installed if `python` on PATH is a different one.
 
-## Tests
+### Cursor and other MCP clients
+
+Any client that can launch a stdio MCP server works; the command is `jupyter-mcp-agent serve -n <notebook>` (or `python -m jupyter_mcp_agent serve ...`). This repo ships a project-level Cursor config in [`.cursor/mcp.json`](.cursor/mcp.json), plus an agent rule ([`.cursor/rules/research-notebook-mcp-agent.mdc`](.cursor/rules/research-notebook-mcp-agent.mdc)) and a workflow skill ([`.cursor/skills/research-notebook-mcp-workflow/SKILL.md`](.cursor/skills/research-notebook-mcp-workflow/SKILL.md)). Cursor on Windows often ignores `cwd`; set `LLM_JUPYTER_PROCESS_CWD` (or `--process-cwd`) when relative paths resolve in the wrong place. Reload the client after changing MCP config.
+
+### Try it without an MCP client
+
+`scripts/agent_mcp_selftest.py` calls the same tool handlers in-process:
 
 ```bash
+python scripts/agent_mcp_selftest.py -n examples/agent_demo_euler.ipynb --list-cell-ids
+python scripts/agent_mcp_selftest.py -n examples/agent_demo_euler.ipynb run run_all=true
+python scripts/agent_mcp_selftest.py notebook_validate
+```
+
+Other CLI commands:
+
+```bash
+jupyter-mcp-agent export-apynb path/to/notebook.ipynb            # (re)write the same-stem .apynb code sidecar
+jupyter-mcp-agent manifest-tail path/to/notebook.ipynb --last 8   # recent manifest records for a notebook
+jupyter-mcp-agent manifest-tail path/to/notebook.ipynb --run-id abcdef123456
+```
+
+## Configuration
+
+| Option / variable | Meaning |
+|----------|---------|
+| `--notebook` / `LLM_JUPYTER_NOTEBOOK` | Default notebook; also anchors the write sandbox |
+| `--default-mode` / `LLM_JUPYTER_MODE` | `explore` or `record` |
+| `--roots` / `LLM_JUPYTER_ROOTS` | Extra allowed directories (`os.pathsep`-separated) |
+| `--process-cwd` / `LLM_JUPYTER_PROCESS_CWD` | `chdir` before serving (for hosts that ignore `cwd`) |
+| `--kernel-cwd` / `LLM_JUPYTER_KERNEL_CWD` | `notebook_parent` (default) or `process` |
+| `--watch` | Dev only: restart when package sources change (needs `watchfiles`) |
+| `LLM_NB_ART_PREFIX` | Passed into the kernel so saved figures can share a searchable prefix |
+
+Environment variables keep the `LLM_JUPYTER_` prefix, and notebooks keep the `metadata.llm_jupyter` namespace and the `.llm_jupyter/` evidence folder, so existing notebooks and configs keep working.
+
+**Security:** with `--notebook` set, writes are limited to that notebook's folder plus `--roots`. Without `-n`, each tool call is anchored only to the path it names, so use `-n` in real projects. The kernel runs arbitrary code as your user. Only point it at notebooks you trust.
+
+## Architecture
+
+```
+MCP client (Claude Code / Desktop / Cursor / ...)
+        | stdio (Model Context Protocol)
+        v
+server.py   FastMCP tool surface, JSON envelopes, path sandbox
+session.py  per-notebook kernel pool (jupyter_client), exclusive locks, run orchestration
+notebook.py / notebook_cells_patch.py / cells_apply_helpers.py   nbformat read/modify/write
+manifest.py / stamp.py / env_snapshot.py   run_id, file stamps, manifest.jsonl, env capture
+chunks.py / previews.py / stream_artifacts.py   capped stdout/stderr, previews, spill files
+companion.py   .apynb code-cell sidecar export and drift checks
+cli.py      `serve`, `export-apynb`, `manifest-tail`
+```
+
+Source lives in [`src/jupyter_mcp_agent/`](src/jupyter_mcp_agent); `src/llm_jupyter/` is the compatibility alias.
+
+## Repository layout
+
+| Path | Contents |
+|------|----------|
+| `src/jupyter_mcp_agent/` | The package |
+| `tests/` | pytest suite (`@pytest.mark.kernel` tests start a live ipykernel) |
+| `examples/` | Small demo notebooks ([examples/README.md](examples/README.md)) |
+| `benchmarks/case_studies/` | MCP vs no-MCP research notebooks ([benchmarks/README.md](benchmarks/README.md)) |
+| `scripts/` | Selftest harness, profiling and demo scripts |
+| `docs/` | PRD and implementation notes |
+
+## Development
+
+```bash
+pip install -e ".[dev]"
 pytest -q
 ```
 
-Kernel-heavy cases are marked `@pytest.mark.kernel` (included by default).
+## Status
 
-Committed demos under **`demos/`** (with `manifest.jsonl` gitignored there):
+Beta (0.3.x). The MCP tool surface is usable day to day but may still change between minor versions; see [CHANGELOG.md](CHANGELOG.md). Tested on Windows and Linux with Python 3.10 and 3.12.
 
-| Notebook | Idea |
-|----------|------|
-| [`demos/agent_scratch.ipynb`](demos/agent_scratch.ipynb) | Monte Carlo π |
-| [`demos/agent_demo_euler.ipynb`](demos/agent_demo_euler.ipynb) | Euler vs `exp(-t)` |
-| [`demos/agent_demo_buffer.ipynb`](demos/agent_demo_buffer.ipynb) | Rolling mean (`*.apynb` demo) |
-| [`demos/agent_demo_lognormal.ipynb`](demos/agent_demo_lognormal.ipynb) | Lognormal mean vs closed form |
-| [`demos/agent_demo_beta.ipynb`](demos/agent_demo_beta.ipynb) | Beta–Binomial posterior |
-| [`demos/agent_demo_markov.ipynb`](demos/agent_demo_markov.ipynb) | Two-state stationary distribution |
-| [`demos/agent_demo_ols.ipynb`](demos/agent_demo_ols.ipynb) | OLS recovery under Gaussian noise |
-| [`demos/agent_demo_softmax.ipynb`](demos/agent_demo_softmax.ipynb) | Softmax temperature vs entropy |
-| [`demos/agent_demo_poisson.ipynb`](demos/agent_demo_poisson.ipynb) | Poisson rate + Wald CI |
-| [`demos/agent_demo_exponential.ipynb`](demos/agent_demo_exponential.ipynb) | Exponential mean vs **1/λ** |
+## License
 
-**MCP-style manual calls** (same handlers as `python -m jupyter_mcp_agent serve`):
-
-```bash
-python scripts/agent_mcp_selftest.py -n demos/agent_demo_euler.ipynb run run_all=true
-python scripts/agent_mcp_selftest.py -n demos/agent_demo_euler.ipynb --list-cell-ids
-```
-
-Ephemeral temp-dir scripts (still useful for CI-free smoke):
-
-```bash
-python scripts/demo_research_sin_inv.py
-python scripts/demo_polyfit_noise.py
-```
-
-## Scope notes (v1)
-
-Companion YAML/JSON cell mirror, `cells_apply`, and `variable_preview` are **not** implemented yet; see [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md).
+[MIT](LICENSE)
