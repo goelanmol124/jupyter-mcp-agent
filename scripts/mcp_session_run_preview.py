@@ -35,7 +35,7 @@ def _warn_roots(nb: Path, roots: list[Path]) -> None:
     if extras:
         return
     # Default allowlist is notebook parent only - matrix trials under benchmarks/ need --roots .
-    markers = ("benchmarks", "_matrix_trials", "demos")
+    markers = ("benchmarks", "_matrix_trials", "demos", "examples")
     parts = {p.lower() for p in nb_parent.parts}
     if any(m in parts for m in markers) or "v04_agent_matrix" in str(nb_parent).lower():
         print(

@@ -8,7 +8,7 @@
         "jupyter_mcp_agent",
         "serve",
         "-n",
-        "demos/rnd_benchmark_2026/analysis_mcp.ipynb",
+        "benchmarks/case_studies/rnd_benchmark_2026/analysis_mcp.ipynb",
         "--roots",
         "."
       ],

@@ -34,6 +34,18 @@ runs/
 _wftest/
 /*.png
 
+# Local research leftovers, not part of the published package.
+# Snapshot of the harness/gate tests lives on branch wip/pre-cleanup-2026-11-15.
+/demos/
+benchmarks/v04_agent_matrix/
+benchmarks/orchestrator_loop/
+**/_matrix_trials/
+tests/test_scripted_stamp_gate.py
+tests/test_selftest_roots_smoke.py
+tests/test_soft_correct_deliverables.py
+tests/test_transport_label_gate.py
+.cursor/rules/tc6-mcp-mandatory.mdc
+
 # OS / IDE
 .DS_Store
 Thumbs.db

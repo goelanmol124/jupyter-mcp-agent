@@ -22,6 +22,6 @@ print(X_train.shape, X_test.shape)
 
 
 if __name__ == "__main__":
-    write("demos/rnd_benchmark_2026/analysis_mcp.ipynb", "MCP track")
-    write("demos/rnd_benchmark_2026/analysis_terminal.ipynb", "Terminal track")
+    write("benchmarks/case_studies/rnd_benchmark_2026/analysis_mcp.ipynb", "MCP track")
+    write("benchmarks/case_studies/rnd_benchmark_2026/analysis_terminal.ipynb", "Terminal track")
     print("ok")

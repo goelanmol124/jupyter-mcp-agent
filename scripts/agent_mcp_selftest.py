@@ -203,24 +203,24 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_euler.ipynb --list-cell-ids\n"
-            "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_buffer.ipynb notebook_execution_plan\n"
-            "  python scripts/agent_mcp_selftest.py -n demos/agent_demo_lognormal.ipynb run run_all=true\n"
-            "  python scripts/agent_mcp_selftest.py --roots . -n demos/rnd_benchmark_2026/analysis_mcp.ipynb server_info\n"
+            "  python scripts/agent_mcp_selftest.py -n examples/agent_demo_euler.ipynb --list-cell-ids\n"
+            "  python scripts/agent_mcp_selftest.py -n examples/agent_demo_buffer.ipynb notebook_execution_plan\n"
+            "  python scripts/agent_mcp_selftest.py -n examples/agent_demo_lognormal.ipynb run run_all=true\n"
+            "  python scripts/agent_mcp_selftest.py --roots . -n benchmarks/case_studies/rnd_benchmark_2026/analysis_mcp.ipynb server_info\n"
             "  # Same-process run -> variable_preview (prefer this over two CLI invokes):\n"
             "  python scripts/agent_mcp_selftest.py --roots . -n path/to/work.ipynb --session \\\n"
             "      run:run_all=true variable_preview:names=x,y\n"
             "  # Or the dedicated helper (no agent_report stamp):\n"
             "  python scripts/mcp_session_run_preview.py --roots . -n path/to/work.ipynb --names x,y\n"
-            "  python -m jupyter_mcp_agent manifest-tail demos/notebook.ipynb --run-id RUN_ID_HERE\n"
-            "  python scripts/agent_mcp_selftest.py -n demos/agent_scratch.ipynb --companion-strict run run_all=true\n"
+            "  python -m jupyter_mcp_agent manifest-tail examples/notebook.ipynb --run-id RUN_ID_HERE\n"
+            "  python scripts/agent_mcp_selftest.py -n examples/agent_scratch.ipynb --companion-strict run run_all=true\n"
             "    ^ fails when same-stem .apynb is missing.\n"
         ),
     )
     p.add_argument(
         "--notebook",
         "-n",
-        default="demos/agent_scratch.ipynb",
+        default="examples/agent_scratch.ipynb",
         help="Notebook path relative to repo root (or absolute). Default: Monte Carlo pi demo.",
     )
     p.add_argument(

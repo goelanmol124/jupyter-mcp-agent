@@ -9,7 +9,7 @@ Synthetic Gaussian series length **n = 400**, **σ = 0.4**, means **μ− = 0**,
 1. **Grid SSE:** For each candidate τ in **[10, 390]** (both segments ≥ 10 points), compute two-segment SSE with segment-specific sample means; choose minimizing τ.
 2. **CUSUM:** Let `C_k = Σ_{i<k}(x_i − x̄)` for k = 0…n. Restrict argmax of **abs(C_k)** to **k ∈ [10, 390]** so the peak is not taken at trivial endpoints.
 
-Run: `python demos/ab_rnd_baseline/run_changepoint_benchmark.py`
+Run: `python benchmarks/case_studies/ab_rnd_baseline/run_changepoint_benchmark.py`
 
 ## |τ̂ − τ*| (this seed)
 

@@ -1,7 +1,7 @@
 """
 Synthetic mean-shift changepoint benchmark (grid SSE vs |CUSUM| argmax).
 
-Outputs under demos/ab_rnd_baseline/out/: PNG diagnostics + prints a summary table.
+Outputs under benchmarks/case_studies/ab_rnd_baseline/out/: PNG diagnostics + prints a summary table.
 """
 
 from __future__ import annotations

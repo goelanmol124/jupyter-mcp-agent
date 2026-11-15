@@ -3,7 +3,7 @@ Biexponential decay blind fit (toy): simulate noisy data, fit true 4-param model
 compare to misspecified single-exponential fit, save figures + RESULTS.md.
 
 Run from repo root:
-    python demos/longtest_nomcp_biexp/run_analysis.py
+    python benchmarks/case_studies/longtest_nomcp_biexp/run_analysis.py
 """
 from __future__ import annotations
 

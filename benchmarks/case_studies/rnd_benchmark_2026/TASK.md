@@ -1,10 +1,10 @@
 # Offline regression benchmark (Demos)
 
-You are improving **test-set RMSE** on a fixed synthetic regression task. All work stays under `demos/rnd_benchmark_2026/`.
+You are improving **test-set RMSE** on a fixed synthetic regression task. All work stays under `benchmarks/case_studies/rnd_benchmark_2026/`.
 
 ## Data (do not change)
 
-- Load arrays only from **`demos/rnd_benchmark_2026/data.npz`** using `allow_pickle=False`:
+- Load arrays only from **`benchmarks/case_studies/rnd_benchmark_2026/data.npz`** using `allow_pickle=False`:
   - `X_train`, `X_test`, `y_train`, `y_test`
 - **Do not** resplit, shuffle differently, or leak test labels into training decisions.
 - scipy / sklearn / numpy / pandas / matplotlib allowed.
