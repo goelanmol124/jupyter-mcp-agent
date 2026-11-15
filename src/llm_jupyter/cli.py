@@ -10,6 +10,28 @@ from pathlib import Path
 from llm_jupyter.server import build_mcp
 
 
+def apply_process_cwd(
+    process_cwd: str | None = None,
+    *,
+    env_var: str = "LLM_JUPYTER_PROCESS_CWD",
+) -> Path | None:
+    """``os.chdir`` when ``--process-cwd`` / ``LLM_JUPYTER_PROCESS_CWD`` is set.
+
+    Cursor (and some other MCP hosts) often **ignore** mcp.json ``cwd`` and spawn
+    stdio servers from the user profile. Env vars are still applied — set this so
+    ``server_info.process_cwd`` and relative path resolution match the project.
+    """
+    raw = (process_cwd if process_cwd is not None else os.environ.get(env_var, "")).strip()
+    if not raw:
+        return None
+    target = Path(raw).expanduser().resolve()
+    if not target.is_dir():
+        print(f"{env_var} is not a directory: {target}", file=sys.stderr)
+        raise SystemExit(1)
+    os.chdir(target)
+    return target
+
+
 def _serve_child_argv(args: argparse.Namespace) -> list[str]:
     """Rebuild `serve` argv for the child process (never includes --watch)."""
     nb = Path(args.notebook).expanduser() if args.notebook else None
@@ -27,6 +49,10 @@ def _serve_child_argv(args: argparse.Namespace) -> list[str]:
         child.append("--roots")
         child.extend(str(r) for r in roots)
     child.extend(["--default-mode", args.default_mode])
+    if getattr(args, "process_cwd", None):
+        child.extend(["--process-cwd", str(args.process_cwd)])
+    if getattr(args, "kernel_cwd", None):
+        child.extend(["--kernel-cwd", str(args.kernel_cwd)])
     return child
 
 
@@ -62,6 +88,24 @@ def main(argv: list[str] | None = None) -> None:
         help=(
             "Restart automatically when llm_jupyter package sources change (dev; "
             "requires optional dependency watchfiles, e.g. pip install -e \".[dev]\")"
+        ),
+    )
+    serve.add_argument(
+        "--process-cwd",
+        default=os.environ.get("LLM_JUPYTER_PROCESS_CWD"),
+        metavar="DIR",
+        help=(
+            "chdir before serving (also LLM_JUPYTER_PROCESS_CWD). "
+            "Use when the MCP host ignores mcp.json cwd (common on Cursor Windows)."
+        ),
+    )
+    serve.add_argument(
+        "--kernel-cwd",
+        choices=["notebook_parent", "process"],
+        default=None,
+        help=(
+            "Where new ipykernels start (default notebook_parent; also LLM_JUPYTER_KERNEL_CWD). "
+            "notebook_parent makes relative data.npz / plot paths resolve next to the .ipynb."
         ),
     )
 
@@ -163,6 +207,10 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.cmd != "serve":
         raise SystemExit(2)
+
+    apply_process_cwd(args.process_cwd)
+    if args.kernel_cwd:
+        os.environ["LLM_JUPYTER_KERNEL_CWD"] = args.kernel_cwd
 
     nb = Path(args.notebook).expanduser() if args.notebook else None
     roots = [Path(r).expanduser() for r in (args.roots or [])]

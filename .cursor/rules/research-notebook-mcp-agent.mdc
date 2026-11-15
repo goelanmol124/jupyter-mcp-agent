@@ -10,6 +10,7 @@ This repo targets **notebook-style research** with an LLM. When using or impleme
 - **Look at real data**: samples, plots on disk, **stderr** alongside stdout. Metrics alone are not enough.
 - Trace **data flow** and **middle states**—not only final outputs. Use MCP **variable previews** when something is ambiguous.
 - **Debug** with kernel truth: respect **stale-output** hints and **`kernel_generation`** after restarts; rerun chains when diagnosing.
+- After a **first structural win** (honest prep, per-cohort models, etc.), do **residual / cohort forensics**—do not stop at the first big RMSE drop or jump straight to opaque trees.
 - **Keep cell code small**: few functions, little try/except, light typing, no gratuitous production patterns. Let errors surface while exploring.
 - Prefer MCP **cell tools** or **companion file** over editing raw `.ipynb` JSON.
 

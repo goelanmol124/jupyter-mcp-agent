@@ -76,6 +76,24 @@ _NOTEBOOK_EXCLUSIVE_LOCK_ENV = "LLM_JUPYTER_NOTEBOOK_LOCK_TIMEOUT_SEC"
 _COMPACT_ASSISTANT_QUICK_ENV = "LLM_JUPYTER_COMPACT_ASSISTANT_QUICK"
 _STRIP_ANSI_STREAMS_ENV = "LLM_JUPYTER_STRIP_ANSI_STREAMS"
 _VERBOSITY_COMPACT_ENV = "LLM_JUPYTER_VERBOSITY_COMPACT"
+_KERNEL_CWD_ENV = "LLM_JUPYTER_KERNEL_CWD"
+
+
+def kernel_cwd_policy() -> str:
+    """``notebook_parent`` (default) or ``process`` — where new ipykernels start."""
+
+    raw = (os.environ.get(_KERNEL_CWD_ENV) or "notebook_parent").strip().lower()
+    if raw in ("process", "mcp", "server", "inherit"):
+        return "process"
+    return "notebook_parent"
+
+
+def kernel_start_cwd_for_notebook(notebook_path: Path) -> str | None:
+    """Absolute cwd passed to ``KernelManager.start_kernel``, or ``None`` to inherit process cwd."""
+
+    if kernel_cwd_policy() == "process":
+        return None
+    return str(notebook_path.expanduser().resolve().parent)
 
 
 def _verbosity_compact() -> bool:
@@ -161,6 +179,11 @@ KERNEL_TOOL_FIELD_HINTS: dict[str, str] = {
     ),
     "kernel_generation": "Monotonic bump on kernel (re)start for this notebook in this MCP process.",
     "interrupted_flag": "True after kernel_interrupt succeeded for this handle until the next restart.",
+    "kernel_cwd": (
+        "Directory where the ipykernel subprocess was started (default: notebook parent). "
+        "Relative open()/np.load paths resolve here. Opt out with LLM_JUPYTER_KERNEL_CWD=process."
+    ),
+    "kernel_cwd_policy": "notebook_parent (default) or process — see LLM_JUPYTER_KERNEL_CWD / serve --kernel-cwd.",
 }
 
 
@@ -224,6 +247,7 @@ class NotebookKernelHandle:
         self._generation_at_previous_tool_end: int | None = None
         self.full_top_to_bottom_at_generation: int | None = None
         self.interrupted = False
+        self.kernel_cwd: str | None = None
 
     def close(self) -> None:
         self.dispose_nb_client_shell()
@@ -238,6 +262,7 @@ class NotebookKernelHandle:
             except Exception:
                 pass
             self.km = None
+        self.kernel_cwd = None
 
     def dispose_nb_client_shell(self) -> None:
         if self._nb_client and self._nb_client.kc:
@@ -247,7 +272,22 @@ class NotebookKernelHandle:
                 pass
         self._nb_client = None
 
-    def kernel_restart(self, art_prefix: str | None = None) -> dict[str, Any]:
+    def _start_kernel_subprocess(self, notebook_path: Path, art_prefix: str | None) -> None:
+        km = KernelManager(kernel_name="python3")
+        env = os.environ.copy()
+        if art_prefix:
+            env["LLM_NB_ART_PREFIX"] = art_prefix
+        cwd = kernel_start_cwd_for_notebook(notebook_path)
+        if cwd is not None:
+            km.start_kernel(env=env, cwd=cwd)
+            self.kernel_cwd = cwd
+        else:
+            km.start_kernel(env=env)
+            self.kernel_cwd = os.getcwd()
+        self.km = km
+        self.kernel_generation += 1
+
+    def kernel_restart(self, notebook_path: Path, art_prefix: str | None = None) -> dict[str, Any]:
         """Hard-restart kernel; bumps kernel_generation for this notebook only."""
         self.dispose_nb_client_shell()
         if self.km is not None:
@@ -262,17 +302,13 @@ class NotebookKernelHandle:
                 pass
             self.km = None
 
-        km = KernelManager(kernel_name="python3")
-        env = os.environ.copy()
-        if art_prefix:
-            env["LLM_NB_ART_PREFIX"] = art_prefix
-        km.start_kernel(env=env)
-        self.km = km
-        self.kernel_generation += 1
+        self._start_kernel_subprocess(notebook_path, art_prefix)
         self.interrupted = False
         return {
             "ok": True,
             "kernel_generation": self.kernel_generation,
+            "kernel_cwd": self.kernel_cwd,
+            "kernel_cwd_policy": kernel_cwd_policy(),
             "message": "Kernel restarted.",
         }
 
@@ -293,9 +329,11 @@ class NotebookKernelHandle:
             "kernel_alive": alive,
             "interrupted_flag": self.interrupted,
             "full_top_to_bottom_at_generation": self.full_top_to_bottom_at_generation,
+            "kernel_cwd": self.kernel_cwd,
+            "kernel_cwd_policy": kernel_cwd_policy(),
         }
 
-    def _ensure_kernel(self, art_prefix: str | None) -> None:
+    def _ensure_kernel(self, notebook_path: Path, art_prefix: str | None) -> None:
         if self.km is not None and self.km.is_alive():
             return
         self.dispose_nb_client_shell()
@@ -306,13 +344,7 @@ class NotebookKernelHandle:
                 pass
             self.km = None
 
-        km = KernelManager(kernel_name="python3")
-        env = os.environ.copy()
-        if art_prefix:
-            env["LLM_NB_ART_PREFIX"] = art_prefix
-        km.start_kernel(env=env)
-        self.km = km
-        self.kernel_generation += 1
+        self._start_kernel_subprocess(notebook_path, art_prefix)
 
     def _executor(self, nb: Any, notebook_path: Path) -> NotebookClient:
         if self._nb_client is None:
@@ -524,7 +556,7 @@ class KernelSession:
 
     def kernel_restart(self, notebook_path: str | None = None, art_prefix: str | None = None) -> dict[str, Any]:
         path, basis = self._kernel_tools_resolve(notebook_path)
-        out = dict(self._get_handle(path).kernel_restart(art_prefix=art_prefix))
+        out = dict(self._get_handle(path).kernel_restart(path, art_prefix=art_prefix))
         out["notebook_path"] = str(path)
         return {
             **_server_tool_digest(),
@@ -862,11 +894,16 @@ class KernelSession:
 
         handle = self._get_handle(path)
         t0 = time.monotonic()
-        handle._ensure_kernel(art_prefix=os.environ.get("LLM_NB_ART_PREFIX"))
+        handle._ensure_kernel(path, art_prefix=os.environ.get("LLM_NB_ART_PREFIX"))
 
         def _kern_ctx() -> dict[str, Any]:
             k2 = handle.kernel_status()
-            return {"kernel_alive": k2["kernel_alive"], "kernel_generation": k2["kernel_generation"]}
+            return {
+                "kernel_alive": k2["kernel_alive"],
+                "kernel_generation": k2["kernel_generation"],
+                "kernel_cwd": k2.get("kernel_cwd"),
+                "kernel_cwd_policy": k2.get("kernel_cwd_policy"),
+            }
 
         def _res_ctx() -> dict[str, str | bool]:
             return self.notebook_resolution_meta(notebook_path, path)
@@ -1269,7 +1306,7 @@ class KernelSession:
                 if cid0:
                     anchor_short = cid0[:8]
 
-        handle._ensure_kernel(art_prefix=os.environ.get("LLM_NB_ART_PREFIX"))
+        handle._ensure_kernel(path, art_prefix=os.environ.get("LLM_NB_ART_PREFIX"))
 
         from datetime import UTC, datetime
 

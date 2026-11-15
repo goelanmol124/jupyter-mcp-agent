@@ -23,6 +23,7 @@ from llm_jupyter.paths import normalize_allowed_path
 from llm_jupyter.session import (
     KernelSession,
     NotebookConcurrentBusy,
+    kernel_cwd_policy,
     notebook_exclusive_lock_timeout_seconds,
 )
 from llm_jupyter.stamp import notebook_file_stamp
@@ -122,6 +123,9 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
             "- Structural edits notebook_cells_patch; cells_apply wraps code-only set_source.\n"
             "- record manifests add sources_concat_sha256_prefix; optional LLM_JUPYTER_RECORD_NOTEBOOK_SNAPSHOT copies notebook post-save.\n"
             "- Cells with metadata.llm_jupyter.exclude_from_bulk skip bulk run_all/run_until (not explicit cell_id runs).\n"
+            "- Kernel cwd defaults to the notebook parent (relative data.npz / plots work); "
+            "opt out with LLM_JUPYTER_KERNEL_CWD=process or serve --kernel-cwd process. "
+            "server_info.kernel_cwd_policy reports the active policy.\n"
         ),
     )
     sess = KernelSession(notebook_default, roots, default_mode)
@@ -409,7 +413,16 @@ def build_mcp(notebook_default: Path | None, roots: list[Path], default_mode: st
             "python_executable": sys.executable,
             "process_pid": os.getpid(),
             "process_cwd": os.getcwd(),
+            "kernel_cwd_policy": kernel_cwd_policy(),
+            "kernel_cwd_note": (
+                "New ipykernels start with cwd=notebook.parent (so relative data.npz works). "
+                "process_cwd is the MCP server process cwd and may differ. "
+                "Opt out: LLM_JUPYTER_KERNEL_CWD=process or serve --kernel-cwd process."
+            ),
             "default_notebook_path": nb_def,
+            "default_notebook_parent": (
+                str(notebook_default.expanduser().resolve().parent) if notebook_default else None
+            ),
             "extra_roots_resolved": [str(p.expanduser().resolve()) for p in roots],
             "effective_allowed_roots": sess.effective_allowed_roots_resolved_strings(),
             "default_mode": default_mode,

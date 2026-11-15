@@ -48,6 +48,7 @@ python -m llm_jupyter manifest-tail demos/agent_demo_ols.ipynb --run-id YOUR_RUN
 | `LLM_JUPYTER_NOTEBOOK` | Default `--notebook` |
 | `LLM_JUPYTER_MODE` | `explore` or `record` |
 | `LLM_JUPYTER_ROOTS` | Extra allowed directories (`os.pathsep`-separated); default sandbox is the notebook’s parent only when `--notebook` is set |
+| `LLM_JUPYTER_PROCESS_CWD` | `chdir` before `serve` (same as `--process-cwd`); use when the MCP host ignores mcp.json `cwd` (Cursor on Windows often starts in `%USERPROFILE%`) |
 | `LLM_NB_ART_PREFIX` | Passed into the kernel environment so saved figures can reuse a searchable prefix |
 
 **Cursor MCP config example** (`mcp.json`):

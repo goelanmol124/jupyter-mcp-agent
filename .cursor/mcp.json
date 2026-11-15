@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "llm-jupyter": {
+    "llm-jupyter-project": {
       "type": "stdio",
       "command": "python",
       "args": [
@@ -8,11 +8,15 @@
         "llm_jupyter",
         "serve",
         "-n",
-        "demos/rnd_benchmark_2026/analysis_mcp.ipynb"
+        "demos/rnd_benchmark_2026/analysis_mcp.ipynb",
+        "--roots",
+        "."
       ],
       "cwd": "${workspaceFolder}",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/src"
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "LLM_JUPYTER_ROOTS": "${workspaceFolder}",
+        "LLM_JUPYTER_PROCESS_CWD": "${workspaceFolder}"
       }
     }
   }
